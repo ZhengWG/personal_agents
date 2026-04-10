@@ -1,0 +1,43 @@
+name: Weekly Repo Brief Agent
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * 1"
+
+jobs:
+  run-weekly-brief:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+          AGENT_OUTPUT_DIR: agent_outputs
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY is not configured, running dry-run."
+            python agents/weekly_repo_brief.py --dry-run
+          else
+            python agents/weekly_repo_brief.py
+          fi
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-repo-brief
+          path: agent_outputs/*.md
+          if-no-files-found: error
