@@ -1,0 +1,55 @@
+name: Daily AI Inference Digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 1 * * *"
+
+jobs:
+  run-daily-digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run digest agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+          AGENT_OUTPUT_DIR: agent_outputs
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRACKED_GITHUB_REPOS: ${{ vars.TRACKED_GITHUB_REPOS }}
+          TRACKED_NEWS_FEEDS: ${{ vars.TRACKED_NEWS_FEEDS }}
+          TRACKED_SUBREDDITS: ${{ vars.TRACKED_SUBREDDITS }}
+          ARXIV_QUERY: ${{ vars.ARXIV_QUERY }}
+          GITHUB_LOOKBACK_HOURS: ${{ vars.GITHUB_LOOKBACK_HOURS }}
+          GITHUB_PR_LIMIT: ${{ vars.GITHUB_PR_LIMIT }}
+          ARXIV_LIMIT: ${{ vars.ARXIV_LIMIT }}
+          NEWS_FEED_LIMIT: ${{ vars.NEWS_FEED_LIMIT }}
+          REDDIT_LIMIT: ${{ vars.REDDIT_LIMIT }}
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY is not configured, using deterministic render mode."
+            python agents/daily_ai_inference_digest.py --no-llm
+          else
+            python agents/daily_ai_inference_digest.py
+          fi
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-ai-inference-digest
+          path: |
+            agent_outputs/*.md
+            agent_outputs/*.json
+          if-no-files-found: error
