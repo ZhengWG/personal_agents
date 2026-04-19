@@ -1,0 +1,26 @@
+# Logs
+logs/
+*.log
+weekly-yuque-agent/logs/
+
+# Generated reports (local data, not versioned)
+ai-infra-agent/reports/
+
+# Credentials (sanity: mail.env lives in ~/.config but guard against accidents)
+**/mail.env
+**/*.env
+!**/*.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
