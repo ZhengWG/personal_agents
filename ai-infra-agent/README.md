@@ -61,7 +61,7 @@
 | Claude Code CLI | 1.0+ | 已登录。`claude --version` 验证 |
 | Node.js | ≥ 20 | 通常由 nvm 装；脚本会自动把 nvm 的 node bin 加入 PATH |
 | Python | 3.8+ | 用于 SMTP 发信（仅用标准库，无需 pip 装包） |
-| Gmail 账号 | — | 开启 2FA，生成 App Password |
+| 发信邮箱 | — | QQ 邮箱 / Gmail 任选，都需要生成"授权码/App Password"（不是登录密码） |
 
 ## 一键部署（新环境）
 
@@ -81,11 +81,35 @@ claude --print -p "ping" | head -3   # 确认能调通
 
 如未安装，参考 [Claude Code 官方安装](https://claude.com/claude-code)。
 
-### 3. 准备 Gmail 凭证
+### 3. 准备发信凭证（二选一）
+
+#### 3a. QQ 邮箱（推荐，国内直连 SMTP 最稳）
+
+1. 登录 `https://mail.qq.com` → **设置** → **账户**
+2. 滚到 **POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV服务** 区域，**开启 IMAP/SMTP 服务**
+3. 按提示发短信验证，获得 **16 位授权码**（形如 `abcdefghijklmnop`，只显示一次，立刻保存）
+4. 写入凭证文件：
+
+```bash
+mkdir -p ~/.config/ai-infra-agent
+cat > ~/.config/ai-infra-agent/mail.env <<'ENV'
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=你的QQ邮箱@qq.com
+SMTP_PASS=16位授权码
+MAIL_TO=收件人邮箱
+MAIL_FROM=AI Infra Daily <你的QQ邮箱@qq.com>
+ENV
+chmod 600 ~/.config/ai-infra-agent/mail.env
+```
+
+> ⚠ QQ 必须用 **授权码**，不是 QQ 登录密码，否则报 `535 Login fail ... Please use authorized code`。
+
+#### 3b. Gmail（海外网络环境优先）
 
 1. 打开 `https://myaccount.google.com/apppasswords`（需先开启 2FA）
-2. 新建一个 app password（名字写 `ai-infra-agent`），复制 16 位密码
-3. 创建凭证文件：
+2. 新建 app password（名字写 `ai-infra-agent`），复制 16 位密码
+3. 写入凭证文件：
 
 ```bash
 mkdir -p ~/.config/ai-infra-agent
@@ -99,6 +123,8 @@ MAIL_FROM=AI Infra Daily <your_sender@gmail.com>
 ENV
 chmod 600 ~/.config/ai-infra-agent/mail.env
 ```
+
+> ⚠ 国内网络到 `smtp.gmail.com:465` 常被防火墙/代理拦，走 QQ 更省心。
 
 ### 4. 脚本加执行权限
 
@@ -174,18 +200,19 @@ MAIL_TO=user1@x.com,user2@y.com
 
 （`send_mail.py` 已支持逗号分隔）
 
-### 换 SMTP（非 Gmail）
+### 换 SMTP 提供商
 
-`mail.env`：
+`send_mail.py` 对端口 465 走 SSL、其他端口走 STARTTLS，换提供商只改 `mail.env`，**不用改代码**。
 
-```
-SMTP_HOST=smtp.qq.com      # 示例
-SMTP_PORT=465              # SSL；如用 STARTTLS 改 587
-SMTP_USER=xxx@qq.com
-SMTP_PASS=<授权码>
-```
+常见 SMTP 参数速查表：
 
-`send_mail.py` 对 465 走 SSL、其他端口走 STARTTLS，无需改代码。
+| 邮箱 | SMTP_HOST | 端口 | SMTP_PASS 取值 |
+|------|-----------|------|-----------------|
+| QQ 邮箱 | `smtp.qq.com` | 465 (SSL) / 587 (STARTTLS) | 授权码（非登录密码） |
+| Gmail | `smtp.gmail.com` | 465 / 587 | App Password |
+| 163 邮箱 | `smtp.163.com` | 465 / 994 | 客户端授权密码 |
+| 阿里云企业邮 | `smtp.mxhichina.com` | 465 | 邮箱登录密码 |
+| Outlook / Hotmail | `smtp.office365.com` | 587 | 账号密码或 app password |
 
 ## 文件清单
 
@@ -227,8 +254,11 @@ ls -t logs/daily-ai-infra-*.log | head -1 | xargs tail -80
 | 现象 | 排查 |
 |------|------|
 | `MAIL FAILED: env file not found` | 确认 `~/.config/ai-infra-agent/mail.env` 存在，且执行用户可读 |
-| `MAIL FAILED: (535, ...)` 认证失败 | App Password 写错；Gmail 要求 16 位、无空格；确认开了 2FA |
-| `MAIL FAILED: timeout` | 本机网络到 `smtp.gmail.com:465` 不通；办公网可能走代理 |
+| `MAIL FAILED: (535, b'Login fail. ... Please use authorized code')` | QQ 场景：把 QQ 登录密码填到 `SMTP_PASS` 了，必须用授权码 |
+| `MAIL FAILED: (535, b'Username and Password not accepted')` | Gmail 场景：App Password 错或没开 2FA；密码 16 位去空格 |
+| `MAIL FAILED: timeout` | 本机到 SMTP 端口不通（代理/防火墙）；QQ 可试 `SMTP_PORT=587`；Gmail 在国内网可能被墙，换 QQ |
+| `MAIL FAILED: (550, b'Mail content denied')` | QQ 判定正文异常（外链太多），先用短报告试；或在 QQ 邮箱里把发件地址加白名单 |
+| 发送成功但收件箱没收到 | 查垃圾箱；QQ 发 Gmail 首次可能被判垃圾，将发件地址加到通讯录 |
 | 日志里 `command not found: claude` | cron 没继承 PATH；检查 `daily-ai-infra-cron.sh` 里的 nvm PATH 导入；macOS 需要给 cron Full Disk Access |
 
 ### 报告没生成
