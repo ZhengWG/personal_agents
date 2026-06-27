@@ -18,7 +18,7 @@
 
 ## 信息源（全部由 `scripts/fetch_sources.py` 统一抓取，免费、无 token）
 
-GitHub PR/Release（由 `ai-infra-agent/config/repos.json` 配置的 ~16 个推理仓：sglang、vllm、vllm-omni、sglang-omni、TensorRT-LLM、flashinfer、dynamo、Mooncake、lmdeploy、tilelang、TileRT、FlashMLA、llm-d、TGI、transformers、llama.cpp；**高频被提及的新仓会自动晋升进 tracked**，无需手改代码）· arXiv（cs.LG/DC/AR/PF/CL/OS，按推理关键词预筛）· HuggingFace Daily Papers（社区高票）· Hacker News（Algolia）· Reddit r/LocalLLaMA（RSS）· 博客 RSS（HuggingFace / vLLM / PyTorch / NVIDIA / Together / Modal / Anyscale / Character.AI / llm-d / RedHat / Interconnects）。
+GitHub PR/Release（由 `ai-infra-agent/config/repos.json` 配置的 ~16 个推理仓：sglang、vllm、vllm-omni、sglang-omni、TensorRT-LLM、flashinfer、dynamo、Mooncake、lmdeploy、tilelang、TileRT、FlashMLA、llm-d、TGI、transformers、llama.cpp；**高频被提及的新仓会自动晋升进 tracked**，无需手改代码）· arXiv（cs.LG/DC/AR/PF/CL/OS，按推理关键词预筛）· HuggingFace Daily Papers（社区高票）· **HF 模型发布**（deepseek 等组织的新模型/权重，专抓 DSpark 这类 X+HF 首发、不走 GitHub release 的）· Hacker News（Algolia）· Reddit r/LocalLLaMA（RSS）· 博客 RSS（HuggingFace / vLLM / PyTorch / NVIDIA / Together / Modal / Anyscale / Character.AI / llm-d / RedHat / Interconnects）。
 
 ---
 
@@ -49,6 +49,7 @@ WebFetch `https://lmsys.org/blog/`，取最近 7 天与推理强相关的博文�
   **Merged 优先排前**（已落地 > 提案）。
 - **Release**：若 `github_releases` 非空，单列「🚀 版本发布」，从 release notes 提炼推理相关亮点 + 链接。
 - **论文**：从 `papers_hf`（高票优先）+ `papers_arxiv` 里挑**与推理/部署强相关**的（量化/KV cache/MoE/attention/调度/kernel/长上下文…），丢弃训练/RL/纯算法噪声。每条一句**推理视角**价值 + 链接（HF `papers/<id>` 或 arXiv abs）。≤8 条。
+- **HF 模型发布**（`hf_models`）：deepseek 等组织今天新上的模型/权重（如 DSpark 投机解码 checkpoint）。每条带 likes + HF 链接，一句话说它是什么、对推理的意义。
 - **HN + Reddit**：只留推理/量化/部署/本地化强相关的，带 `分数⬆/评论数💬` + 链接。无则写「（今日无相关讨论）」。
 - **博客**：挑推理栈相关的，带链接 + 日期。
 
@@ -72,6 +73,8 @@ SGLang / vLLM / vLLM-Omni / SGLang-Omni —— 各仓按类目，Merged 优先�
 `● 其他 N 条：[#123](url) · [#456](url) · …`
 
 🚀 版本发布            ← 有 release 才出现
+
+🤗 模型 / 权重发布      ← 有 hf_models 才出现（如 DeepSeek DSpark；带 likes + HF 链接）
 
 📄 值得关注的论文       ← ≤8 条，推理视角
 

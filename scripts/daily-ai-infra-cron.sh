@@ -54,9 +54,14 @@ alert() {
     exit 1
   fi
 
+  # 看门狗：claude 卡死 / 网络反复 ECONNRESET 重连时，最多 20 分钟就杀掉，避免挂死数小时
   claude --print --dangerously-skip-permissions \
-    -p "按照 .claude/skills/daily-ai-infra.md 中的步骤，抓取今天 (${TODAY}) 的 AI infra 推理动态，生成日报保存到 ${REPORT}，然后调用 scripts/send_mail.py 发邮件。最后输出 PR/论文/博客/Reddit 各分类条数和邮件发送结果。"
-  rc=$?
+    -p "按照 .claude/skills/daily-ai-infra.md 中的步骤，抓取今天 (${TODAY}) 的 AI infra 推理动态，生成日报保存到 ${REPORT}，然后调用 scripts/send_mail.py 发邮件。最后输出 PR/论文/博客/Reddit 各分类条数和邮件发送结果。" &
+  CLAUDE_PID=$!
+  ( sleep 1200; kill -9 "$CLAUDE_PID" 2>/dev/null ) &
+  WD_PID=$!
+  wait "$CLAUDE_PID"; rc=$?
+  kill "$WD_PID" 2>/dev/null
   echo "Exit code: ${rc}"
 
   # 收尾守卫：claude 失败 或 报告没生成 → 告警

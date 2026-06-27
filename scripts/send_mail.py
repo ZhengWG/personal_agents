@@ -64,7 +64,7 @@ def md_to_html(md: str) -> str:
             out.append("<br/>")
             continue
         # section headers: lines starting with emoji + space
-        if re.match(r"^[📋🔧📄📰💬⭐⚡🚀📈📌]", stripped):
+        if re.match(r"^[📋🔧📄📰💬⭐⚡🚀📈📌🤗]", stripped):
             if in_list:
                 out.append("</ul>")
                 in_list = False
