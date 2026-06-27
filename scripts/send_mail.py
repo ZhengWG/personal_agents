@@ -64,7 +64,7 @@ def md_to_html(md: str) -> str:
             out.append("<br/>")
             continue
         # section headers: lines starting with emoji + space
-        if re.match(r"^[📋🔧📄📰💬⭐]", stripped):
+        if re.match(r"^[📋🔧📄📰💬⭐⚡🚀📈📌]", stripped):
             if in_list:
                 out.append("</ul>")
                 in_list = False
@@ -126,11 +126,19 @@ def escape_html(s: str) -> str:
 
 
 def linkify(s: str) -> str:
-    return re.sub(
-        r"(https?://[^\s<>\"']+)",
+    # markdown [text](url) → anchor first
+    s = re.sub(
+        r"\[([^\]]+)\]\((https?://[^\s)]+)\)",
+        r'<a href="\2" style="color:#1155cc;">\1</a>',
+        s,
+    )
+    # then bare urls (skip the ones already inside a just-built href="...")
+    s = re.sub(
+        r'(?<!href=")(https?://[^\s<>"\']+)',
         r'<a href="\1" style="color:#1155cc;">\1</a>',
         s,
     )
+    return s
 
 
 def send(report_path: Path, env: dict[str, str]) -> None:
