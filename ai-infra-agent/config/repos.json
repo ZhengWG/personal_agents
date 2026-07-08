@@ -1,0 +1,150 @@
+{
+  "_comment": "Self-updating repo list for fetch_sources.py. `tracked` = always fetched (hand-seeded + auto-added). prs=false → releases-only. DYNAMIC: discovery.orgs auto-tracks infra repos from trusted orgs (e.g. deepseek-ai); repos mentioned ≥2×/run across your sources become candidates and auto-promote (faster if on the curated awesome-list). Edit `tracked`/`ignore` freely.",
+  "tracked": [
+    {
+      "repo": "sgl-project/sglang",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "vllm-project/vllm",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "vllm-project/vllm-omni",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "sgl-project/sglang-omni",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "NVIDIA/TensorRT-LLM",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "flashinfer-ai/flashinfer",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "ai-dynamo/dynamo",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "kvcache-ai/Mooncake",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "InternLM/lmdeploy",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "tile-ai/tilelang",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "tile-ai/TileRT",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "lightseekorg/tokenspeed",
+      "prs": true,
+      "releases": false
+    },
+    {
+      "repo": "deepseek-ai/FlashMLA",
+      "prs": true,
+      "releases": false
+    },
+    {
+      "repo": "deepseek-ai/DeepEP",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepGEMM",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "llm-d/llm-d",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "huggingface/text-generation-inference",
+      "prs": false,
+      "releases": true
+    },
+    {
+      "repo": "huggingface/transformers",
+      "prs": false,
+      "releases": true
+    },
+    {
+      "repo": "ggml-org/llama.cpp",
+      "prs": false,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepSpec",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/3FS",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/TileKernels",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DualPipe",
+      "prs": true,
+      "releases": true
+    }
+  ],
+  "candidates": {
+    "user-attachments/assets": {
+      "mentions_total": 1,
+      "runs_seen": 1,
+      "source": "mention",
+      "last_seen": "2026-07-04",
+      "curated": true
+    }
+  },
+  "ignore": [
+    "gitleaks",
+    "grule",
+    "godis",
+    "ollama-webui",
+    "tiny-llm",
+    "awesome-deepseek-integration",
+    "awesome-deepseek-agent",
+    "deepseek-ocr"
+  ],
+  "discovery": {
+    "promote_runs": 3,
+    "promote_items": 4,
+    "org_min_stars": 100,
+    "orgs": [
+      "deepseek-ai"
+    ],
+    "awesome_lists": [
+      "xlite-dev/Awesome-LLM-Inference"
+    ]
+  }
+}
