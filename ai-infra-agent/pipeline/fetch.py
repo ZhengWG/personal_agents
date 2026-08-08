@@ -427,6 +427,66 @@ def _rss_items(xml: bytes) -> list[dict]:
     return items
 
 
+# LMSYS/SGLang 博客没有 RSS，页面是 Next.js 前端渲染 —— WebFetch 抓到的是空壳，
+# 每天都失败、要 Claude 临场想办法。但服务端把文章列表以 JSON 内嵌在
+# self.__next_f 数据块里，直接解析它就稳定了。
+LMSYS_POST = re.compile(
+    r'\{"slug":"(?P<slug>[^"]+)","title":"(?P<title>(?:[^"\\]|\\.)*)"'
+    r'.*?"date":"(?P<date>[^"]*)"'
+    r'(?:.*?"excerpt":"(?P<excerpt>(?:[^"\\]|\\.)*)")?',
+    re.S)
+
+# 站点两种写法都用过：'August 7, 2026' 和 'Dec 02, 2025'，全称和缩写都要认。
+_MONTHS = {}
+for _i, _m in enumerate(
+        "January February March April May June July August September October "
+        "November December".split(), 1):
+    _MONTHS[_m] = _MONTHS[_m[:3]] = _i
+
+
+def _lmsys_date(s: str) -> str:
+    """'August 7, 2026' → '2026-08-07'；解析不了就原样返回。"""
+    m = re.match(r"([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})", (s or "").strip())
+    if not m:
+        return s or ""
+    mon = _MONTHS.get(m.group(1))
+    return f"{m.group(3)}-{mon:02d}-{int(m.group(2)):02d}" if mon else s
+
+
+def fetch_lmsys(days: int = 14, limit: int = 8) -> list[dict]:
+    out: list[dict] = []
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    try:
+        html = http_get("https://lmsys.org/blog/", label="lmsys").decode("utf-8", "ignore")
+    except Exception as e:  # noqa: BLE001
+        warn(f"lmsys blog failed: {e}")
+        return out
+    raw = html.replace('\\"', '"')       # Next.js payload 里的 JSON 是转义过的
+    seen: set = set()
+    for m in LMSYS_POST.finditer(raw):
+        slug = m.group("slug")
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        date = _lmsys_date(m.group("date"))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+            warn(f"lmsys: 日期解析失败 {m.group('date')!r}，跳过 {slug}")
+            continue
+        if date < cutoff:
+            continue
+        out.append({
+            "source": "blog", "site": "LMSYS", "id": f"https://lmsys.org/blog/{slug}",
+            "title": (m.group("title") or "").replace('\\"', '"').strip(),
+            "url": f"https://lmsys.org/blog/{slug}", "date": date,
+            "summary": (m.group("excerpt") or "")[:400].strip(),
+        })
+        if len(out) >= limit:
+            break
+    if not out:
+        warn("lmsys blog: 解析到 0 篇（页面结构可能变了，去看 LMSYS_POST 正则）")
+    return out
+
+
 def fetch_blogs(limit_per_feed: int = 6) -> list[dict]:
     out: list[dict] = []
     for site, feed in BLOG_FEEDS:
@@ -483,7 +543,7 @@ def main() -> None:
         "hf_models": fetch_hf_models(hf_authors, since) if args.mode == "daily" else [],
         "hn": fetch_hn(since),
         "reddit": fetch_reddit() if args.mode == "daily" else [],
-        "blogs": fetch_blogs(),
+        "blogs": fetch_blogs() + fetch_lmsys(),
     }
 
     # --- mention-based promotion (daily only), gated by the curated awesome-list ---

@@ -20,8 +20,8 @@ launchd  (scripts/install-schedule.sh <agent> 安装)
        └─ source scripts/_env.sh         # 共享：PATH / 代理 / proxy_ok / run_claude
             └─ claude --print -p "按 .claude/skills/<agent>.md 执行..."
                    └─ .claude/skills/<agent>.md    # 步骤 + 分类规则 + 输出格式（流程真值）
-                          ├─ <agent>/agent.py <verb>   # 该 agent 的唯一 CLI
-                          ├─ WebFetch / WebSearch      # 公开源 + novelty 搜索
+                          ├─ <agent>/agent.py <verb>   # 该 agent 的唯一 CLI（抓取/去重/拓源…）
+                          ├─ WebSearch                 # 只留需要判断力的部分（novelty 搜索）
                           └─ scripts/send_mail.py      # 共享 SMTP 发信
 ```
 
@@ -29,10 +29,11 @@ launchd  (scripts/install-schedule.sh <agent> 安装)
 每个 agent 的抓取/处理逻辑全部收在自己目录里，**一个 `run.sh` + 一个 `agent.py`**。
 加第二个 agent 不会让 `scripts/` 继续膨胀。
 
-**shell 不碰数据**：cron 脚本只负责搭环境 + 兜底告警，真正的流程真值只住在 skill 里一份，
-数据脚本由 Claude 按 skill 步骤调用。
+**shell 不碰数据**：`run.sh` 只负责搭环境、调 claude、失败兜底；流程真值只住在 skill 里一份；
+数据处理全在 `agent.py` 的子命令里。三者职责不重叠。
 
-新增 agent 只需：**写一个 skill + 一个 cron 脚本（source `_env.sh`）+ 装一条 launchd**。
+**能脚本化的就不要让模型手爬**：HTML 解析、去重、统计一律进 `agent.py`；
+只有真正需要判断力的（挑选、总结、novelty 搜索）才留给 Claude。
 
 ## 📂 顶层结构
 
@@ -53,7 +54,10 @@ personal_agents/
 └── ai-infra-agent/           # 一个 agent = 一个自包含目录
     ├── run.sh                #   唯一入口（launchd 调它；--since 走回顾模式）
     ├── agent.py              #   唯一 CLI：fetch/dedup/discover/fallback/stats
-    ├── pipeline/             #   实现（paths 集中解析，不依赖 cwd）
+    ├── pipeline/
+    │   ├── http.py           #     带重试的取数层（全仓唯一 urlopen 出口）
+    │   ├── paths.py          #     路径集中解析，不依赖 cwd
+    │   └── fetch/discover/dedup/fallback/stats.py
     ├── config/               #   repos.json（机器可读）+ sources.md（人类可读记忆）
     ├── state/                #   seen.json / pending.json / discover.json
     ├── reports/              #   YYYY-MM-DD.md
@@ -97,6 +101,21 @@ run_claude 1200 "按 .claude/skills/<agent>.md 执行..."   # 带看门狗调 cl
 | `timeout` 是 Homebrew coreutils，干净 PATH 里没有 | `run_claude` 自带 `sleep + kill` 看门狗 |
 | `source ~/.zshrc` 在非交互 shell 会中途中断 | 完全不 source，自包含 |
 
+### 网络不稳怎么办
+
+抓取层的重试住在**各 agent 自己的** `pipeline/http.py`（不是共享的，因为不同 agent
+的源特性差别很大）。ai-infra-agent 的策略，可以直接抄：
+
+| 情况 | 行为 |
+|---|---|
+| 连接重置 / 超时 / DNS 抽风 / 502·503·504 | 重试 3 次，指数退避 + 抖动 |
+| 429 或 GitHub 限流（403 带 `X-RateLimit-Reset`） | **按服务端指定的时间等**，不自己拍脑袋 |
+| 404 / URL 写错 / 401 | 立即放弃，退避只会白等 |
+
+关键是**别让一次抖动吃掉整个源**：以前单次 `urlopen` 失败就 `except → warn → return []`，
+一轮 40 个串行请求，网络差的时候会静默少掉几块内容，日志里只有一行 warning。
+跑完打一行 `请求 N 次，重试 M 次，放弃 K 次`，让"网络稳不稳"变成数字而不是猜测。
+
 ## 🚀 新增一个 Agent（工程范式）
 
 1. 建目录 `<name>-agent/`，写 `run.sh`（**必须 source `../scripts/_env.sh`**）+ `agent.py`
@@ -128,4 +147,8 @@ scripts/install-schedule.sh ai-infra-agent --uninstall  # 暂停调度
 
 ## 📎 依赖
 
-macOS / Linux · Claude Code CLI · Node ≥ 20（nvm 即可）· Python 3.8+（标准库）· 具体 agent 的额外依赖见各 agent README。
+- **macOS** —— 定时用 launchd；Linux 需改用 systemd timer（`install-schedule.sh` 只支持 launchd）
+- **Claude Code CLI** —— 已登录。原生二进制，**不依赖 node**
+- **Python 3.9+** —— 全部只用标准库，**不需要 pip 装任何包**（系统自带的 `/usr/bin/python3` 就够）
+- **Node** —— 本仓当前没有 agent 需要它；`_env.sh` 仍会按 nvm → Homebrew 探测，留给以后用 npm 工具的 agent
+- 具体 agent 的额外依赖（如 SMTP 凭证）见各 agent 的 README

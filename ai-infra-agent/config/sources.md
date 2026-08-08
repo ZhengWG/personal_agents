@@ -29,7 +29,7 @@ KV / 通信 / 并行：`kvcache-ai/Mooncake` · `deepseek-ai/DeepEP` · `deepsee
 ### 其他源（见 `agent.py fetch`）
 arXiv（cs.LG/DC/AR/PF/CL/OS，推理关键词预筛）· HuggingFace Daily Papers · HF 模型发布
 （deepseek 等组织）· Hacker News（Algolia）· Reddit r/LocalLLaMA · 11 个博客 RSS ·
-LMSYS/SGLang blog（无 RSS，Claude WebFetch）
+LMSYS/SGLang blog（无 RSS，解析其 Next.js 内嵌 JSON —— 见 `pipeline/fetch.py:fetch_lmsys`）
 
 ### 自动发现机制（`agent.py fetch` 里的 `discovery` 配置）
 - `orgs`: `deepseek-ai` — 该组织新出的 infra 仓（star ≥100、近 180 天有 push）自动进 tracked
@@ -62,6 +62,11 @@ LMSYS/SGLang blog（无 RSS，Claude WebFetch）
 - parallax（`GradientHQ/parallax`）— 2026-08-08 — 分布式 serving 框架，主打「用异构/家用设备拼自己的推理集群」，和 petals 一脉但面向 2026 的 MoE
 - xllm（`xLLM-AI/xllm`）· rtp-llm（`alibaba/rtp-llm`）· chitu（`thu-pacman/chitu`）— 2026-08-08 — 三个国产推理引擎，主打国产/异构加速卡适配，先挂观察看是否持续出料
 - AFD（Attention-FFN Disaggregation）— 2026-08-08 — 把 decode 阶段的 attention 与 FFN 拆到不同 GPU 池，PD 分离之后的下一级拆分粒度（arXiv:2605.28302、2601.21351）；NVIDIA 收 Groq IP 的技术动机
+- HPC-Ops（`Tencent/hpc-ops`）— 2026-08-08 — 腾讯混元 AI Infra 开源的推理算子库（Dynamic Attention / Fused MoE / GEMM / 采样 / 通信计算融合），已在腾讯大规模生产 serving 落地，且已接入 SGLang；对标 FlashInfer 的第二个「厂商级算子库」入口，值得持续跟
+- SpecForge（`sgl-project/SpecForge`）— 2026-08-08 — SGLang 的投机解码**训练**栈，v0.3.0 把 target/draft 训练解耦成分离式 + 共置两种模式，并放出 SpecBundle 开源 draft 模型系列；投机解码从「推理技巧」变成「要配套训练基建」的信号
+- DeepSeek-Reasonix（`esengine/DeepSeek-Reasonix`）— 2026-08-08 — 终端 coding agent，卖点是「围绕 prefix-cache 稳定性做工程」；应用层，但反映 agent 侧开始按推理引擎的缓存特性反向设计，观察是否形成模式
+- vllm-ascend（`vllm-project/vllm-ascend`）— 2026-08-08 — vLLM 官方社区维护的昇腾硬件插件，国产卡适配的主入口之一，先挂观察
+- Miles（SGLang 生态的 RL / 训练框架）— 2026-08-08 — 与 SGLang rollout 深度绑定，Day-0 模型支持、MXFP8/NVFP4 RL 都从这里出；不是推理引擎但强影响推理侧精度格式，挂观察
 
 > 排除记录：`dphnAI/sonar` = Aphrodite Engine 改名，**不是新项目**，别再当新发现（2026-08-08 查证）。
 
@@ -105,3 +110,11 @@ EPP, endpoint picker, WVA, workload variant autoscaler, HPA, GKE, OpenShift, Gro
 TENT, GDR, GPU Direct RDMA, TensorCast, kvpress, KVCache-Factory, parallax, xllm, rtp-llm,
 chitu, MTPLX, ds4, sonar, Inkling, DSpark, Speculators, ThunderAgent, AIPerf, mocker,
 Genesis Open Models, Unsloth, QAT, Q2_0, TQ1_0, IQ1_M, Helion, FBTriton, nvmath-python
+<!-- 2026-08-08 第二轮新增（查证过的，含判定"不值得跟"的，避免明天重复发现） -->
+HPC-Ops, Dynamic Attention, SpecForge, SpecBundle, SGL-Diffusion, AR+DiT, Miles, RadixArk,
+BCG, breakable CUDA graph, PCP, prefill context parallel, TGV, Marlin, MXFP4 Marlin,
+MNNVL, CUDA VMM, Ulysses, sequence parallel Ulysses, barge-in, MOSS, MOSS-TTS-Realtime,
+Higgs TTS, SANA-Video, Cosmos3-Nano, MiniMax H3, Gemma 4, Qwen3-Omni, DeepSeek-V4 Flash,
+Kimi K3, Inkling, OPD, on-policy distillation, sglext_spec, agent-aware KV cache hints,
+Reasonix, DeepSeek-Reasonix, airllm, vllm-ascend, ai-hub-models, gfx1030, V620,
+TencentDB-Agent-Memory, scheme-based quantization

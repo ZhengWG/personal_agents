@@ -29,7 +29,7 @@
 
 ### A. 核心盘（由 `agent.py fetch` 统一抓取，免费、无 token）
 
-GitHub PR/Release（由 `ai-infra-agent/config/repos.json` 配置的 ~16 个推理仓：sglang、vllm、vllm-omni、sglang-omni、TensorRT-LLM、flashinfer、dynamo、Mooncake、lmdeploy、tilelang、TileRT、FlashMLA、llm-d、TGI、transformers、llama.cpp；**高频被提及的新仓会自动晋升进 tracked**，无需手改代码）· arXiv（cs.LG/DC/AR/PF/CL/OS，按推理关键词预筛）· HuggingFace Daily Papers（社区高票）· **HF 模型发布**（deepseek 等组织的新模型/权重，专抓 DSpark 这类 X+HF 首发、不走 GitHub release 的）· Hacker News（Algolia）· Reddit r/LocalLLaMA（RSS）· 博客 RSS（HuggingFace / vLLM / PyTorch / NVIDIA / Together / Modal / Anyscale / Character.AI / llm-d / RedHat / Interconnects）。
+GitHub PR/Release（由 `ai-infra-agent/config/repos.json` 配置的 ~16 个推理仓：sglang、vllm、vllm-omni、sglang-omni、TensorRT-LLM、flashinfer、dynamo、Mooncake、lmdeploy、tilelang、TileRT、FlashMLA、llm-d、TGI、transformers、llama.cpp；**高频被提及的新仓会自动晋升进 tracked**，无需手改代码）· arXiv（cs.LG/DC/AR/PF/CL/OS，按推理关键词预筛）· HuggingFace Daily Papers（社区高票）· **HF 模型发布**（deepseek 等组织的新模型/权重，专抓 DSpark 这类 X+HF 首发、不走 GitHub release 的）· Hacker News（Algolia）· Reddit r/LocalLLaMA（RSS）· LMSYS/SGLang 博客（解析内嵌 JSON，无 RSS）· 博客 RSS（HuggingFace / vLLM / PyTorch / NVIDIA / Together / Modal / Anyscale / Character.AI / llm-d / RedHat / Interconnects）。
 
 ### B. 拓源盘（由 `agent.py discover` 抓取 + 你的 WebSearch 补一招）
 
@@ -55,10 +55,6 @@ python3 ai-infra-agent/agent.py fetch --mode daily \
 > ⚠️ **两阶段提交**：这一步只把条目写进 `state/pending.json`，**不动 `seen.json`**。
 > 必须等报告真的发出去之后，在 Step 7 跑 `agent.py dedup --commit` 才算数。
 > 中途崩了就不提交 —— 条目明天原样再来，不会被"标记已读但从没报过"吞掉。
-
-### Step 2：补充 LMSYS/SGLang 博客（该源无 RSS）
-
-WebFetch `https://lmsys.org/blog/`，取最近 7 天与推理强相关的博文（标题+链接+一句话）。抓不到就跳过。
 
 ### Step 2.5：拓源（**必做，不可跳**）
 

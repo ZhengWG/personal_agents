@@ -8,7 +8,8 @@
 vllm-omni / sglang-omni / TensorRT-LLM / flashinfer / dynamo / Mooncake / lmdeploy / tilelang /
 TileRT / tokenspeed / DeepSeek 全家桶 / llm-d / TGI / transformers / llama.cpp）· arXiv
 （cs.LG/DC/AR/PF/CL/OS，推理关键词预筛）· HuggingFace Daily Papers · HF 模型发布 ·
-Hacker News（Algolia）· Reddit r/LocalLLaMA · 11 个博客 RSS。
+Hacker News（Algolia）· Reddit r/LocalLLaMA · 11 个博客 RSS ·
+**LMSYS/SGLang 博客**（该站无 RSS、页面是 Next.js 前端渲染，`fetch_lmsys()` 解析其内嵌 JSON）。
 
 **拓源盘**（`agent.py discover`）：GitHub Trending 日/周榜 · topic 搜索的近期高星仓 ·
 策展 awesome 清单的增量条目 · 新术语识别。外加 Claude 的 novelty 搜索。
@@ -172,11 +173,67 @@ launchctl kickstart -p gui/$(id -u)/local.ai-infra-agent
 
 明天 09:00 自动触发，日志落 `logs/daily-ai-infra-YYYYMMDD-HHMMSS.log`。
 
+## CLI：`agent.py`
+
+所有数据处理都在这一个入口下，skill 里调的就是它。**在哪个目录执行都可以**
+（路径由 `pipeline/paths.py` 从文件位置反推，不依赖 cwd）：
+
+```bash
+python3 ai-infra-agent/agent.py fetch --mode daily          # 核心盘 → 归一化 JSON(stdout)
+python3 ai-infra-agent/agent.py fetch --mode range --since 6mo
+python3 ai-infra-agent/agent.py dedup                       # 跨天去重（stdin→stdout）
+python3 ai-infra-agent/agent.py dedup --commit              # 两阶段提交的第二阶段
+python3 ai-infra-agent/agent.py dedup --purge-date 2026-08-07   # 运维：撤销某天的已读标记
+python3 ai-infra-agent/agent.py discover --from <抓取JSON>  # 拓源
+python3 ai-infra-agent/agent.py fallback --from <抓取JSON> --out <md>   # 降级报告
+python3 ai-infra-agent/agent.py stats <报告> --budget 20    # 阅读时间，超预算退出码 1
+```
+
+各命令都支持 `--no-record`（只读不落状态）和 `--help`。
+
+## 三个关键机制
+
+这三样都是被真实故障逼出来的，改代码前先理解为什么这么设计。
+
+### 1. 去重用两阶段提交
+
+`dedup` **只写 `state/pending.json`，不碰 `seen.json`**；必须等报告真的发出去，
+`run.sh` 或 skill 才调 `dedup --commit` 落盘。
+
+> **为什么**：旧版在抓取阶段就标记"已读"，但报告要十几分钟后才生成。
+> 中间任何崩溃（超时、限额、手滑 kill）都会造成**条目被标记已读、报告却从没产出**——
+> 一整天的料被吞掉，第二天也不会再出现。2026-08-07 连炸两轮才发现。
+>
+> 崩在中间 → pending 被下一轮直接覆盖，`seen.json` 从未被污染。
+
+### 2. 失败分四级降级，绝不空手而归
+
+`run.sh` 在 claude 退出后按产物决定怎么办：
+
+| 级别 | 条件 | 动作 |
+|---|---|---|
+| L1 | 退出码 0 且报告可用 | 正常，claude 自己发信 |
+| L2 | 报告**已填过内容**（≥5 条） | 加「未完成」横幅补发半成品 |
+| L3 | 无可用报告，但抓取 JSON 在 | `agent.py fallback` 发几百条带链接的原始条目 |
+| L4 | 什么都没有 | 才发失败告警 |
+
+两个判断细节，少了会出事：
+
+- **`fresh()`**：产物必须是**本轮**生成的（mtime ≥ 启动时间）。少了这条，上一轮留在磁盘上的
+  旧报告会被当成本轮半成品重发，还会连带提交一批没被报道过的 dedup 条目。
+- **`report_usable()`**：光有 Step 2.7 落的空骨架（全是「（生成中…）」）不值得发，
+  那还不如走 L3 发原始条目。
+
+### 3. 阅读预算 ≤20 分钟，且可自检
+
+不设限时模型会写到 175 条 / 32 分钟，其中 GitHub PR 一节独占 64%。
+skill 里给了各节硬上限，写完必须跑 `agent.py stats --budget 20` 自检，超了回去砍。
+
 ## 自定义
 
 ### 改触发时间
 
-编辑 crontab 行的 cron 表达式：
+重新装一次即可（幂等，会先卸再装）：
 
 ```bash
 scripts/install-schedule.sh ai-infra-agent --at 08:30
@@ -262,6 +319,20 @@ personal_agents/
 ~/.config/ai-infra-agent/mail.env      # perm 600
 ```
 
+## 网络不稳
+
+所有取数走 `pipeline/http.py`（**全仓唯一的 `urlopen` 出口**）：
+
+| 情况 | 行为 |
+|---|---|
+| 连接重置 / 超时 / DNS 抽风 / 502·503·504 | 重试 3 次，指数退避 + 抖动 |
+| 429、GitHub 限流（403 带 `X-RateLimit-Reset`） | 按服务端指定时间等 |
+| 404 / URL 写错 | 立即放弃，不浪费退避 |
+
+以前一次抖动就整源丢弃（`except → warn → return []`），一轮 40 个串行请求，
+网络差时会静默少内容而日志里只有一行 warning。现在跑完会打
+`请求 N 次，重试 M 次，放弃 K 次`，网络状况是可观测的数字。
+
 ## 排障
 
 ### 邮件没发出
@@ -271,7 +342,8 @@ personal_agents/
 ls -t logs/daily-ai-infra-*.log | head -1 | xargs tail -80
 
 # 2) 单独测发信
-/usr/bin/python3 scripts/send_mail.py ai-infra-agent/reports/2026-04-19.md
+printf '📋 发信测试\n\n📌 说明\n● [链接测试](https://github.com/vllm-project/vllm)\n' > /tmp/t.md
+/usr/bin/python3 scripts/send_mail.py /tmp/t.md
 ```
 
 常见原因：
@@ -284,7 +356,7 @@ ls -t logs/daily-ai-infra-*.log | head -1 | xargs tail -80
 | `MAIL FAILED: timeout` | 本机到 SMTP 端口不通（代理/防火墙）；QQ 可试 `SMTP_PORT=587`；Gmail 在国内网可能被墙，换 QQ |
 | `MAIL FAILED: (550, b'Mail content denied')` | QQ 判定正文异常（外链太多），先用短报告试；或在 QQ 邮箱里把发件地址加白名单 |
 | 发送成功但收件箱没收到 | 查垃圾箱；QQ 发 Gmail 首次可能被判垃圾，将发件地址加到通讯录 |
-| 日志里 `command not found: claude` | cron 没继承 PATH；检查 `run.sh` 里的 nvm PATH 导入；macOS 需要给 cron Full Disk Access |
+| 日志里 `command not found: claude` | launchd 的 PATH 不含 `~/.local/bin`；确认 `run.sh` 第一行 source 了 `../scripts/_env.sh` |
 
 ### 报告没生成
 
@@ -297,21 +369,22 @@ cat logs/daily-ai-infra-*.log | tail -200
 - `claude --print` 卡住 → 检查 `claude auth` 是否过期
 - 抓取某个源失败但整体应该继续 → skill 已容错，会跳过
 
-### crontab 没触发
+### 定时没触发
 
 ```bash
-# macOS 看 cron 执行日志
-log show --predicate 'process == "cron"' --last 24h | tail -30
-
-# Linux
-grep CRON /var/log/syslog | tail -20
+scripts/install-schedule.sh ai-infra-agent --status   # 看 runs / last exit code
+launchctl print gui/$(id -u)/local.ai-infra-agent     # 完整状态
+log show --predicate 'process == "launchd"' --last 12h | grep ai-infra   # 系统日志
 ```
+
+常见原因：机器当时关机（launchd 只在唤醒后补跑，关机期间的触发会丢）、
+Clash 没起（预检会告警退出，日志里能看到）、plist 被卸载。
 
 ## 卸载
 
 ```bash
-# 取消定时
-crontab -l | grep -v run.sh | crontab -
+# 取消定时（launchd）
+scripts/install-schedule.sh ai-infra-agent --uninstall
 
 # 删凭证
 rm -rf ~/.config/ai-infra-agent
