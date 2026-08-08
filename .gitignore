@@ -1,7 +1,6 @@
 # Logs
 logs/
 *.log
-weekly-yuque-agent/logs/
 
 # Generated reports (local data, not versioned)
 ai-infra-agent/reports/

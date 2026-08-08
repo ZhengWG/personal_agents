@@ -63,8 +63,31 @@ def md_to_html(md: str) -> str:
                 in_list = False
             out.append("<br/>")
             continue
+        # markdown headers: "## 📌 今日速览" / "### repo（N 条）"
+        # 模型写报告时用标准 markdown 标记（而不是模板里的裸 emoji 开头）是常态，
+        # 渲染器必须两种都认，否则整篇标题全掉进 fallback 段落。
+        m = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        if m:
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            text, level = escape_html(m.group(2)), len(m.group(1))
+            if level <= 2:
+                out.append(f'<h2 style="color:#0b5394;">{text}</h2>')
+            elif level == 3:
+                out.append(f'<h3 style="color:#3d85c6;margin-top:16px;">{text}</h3>')
+            else:
+                out.append(f'<h4 style="color:#555;margin-top:10px;">{text}</h4>')
+            continue
+        # horizontal rule
+        if re.fullmatch(r"-{3,}|\*{3,}", stripped):
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            out.append('<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"/>')
+            continue
         # section headers: lines starting with emoji + space
-        if re.match(r"^[📋🔧📄📰💬⭐⚡🚀📈📌🤗]", stripped):
+        if re.match(r"^[📋🔧📄📰💬⭐⚡🚀📈📌🤗🆕]", stripped):
             if in_list:
                 out.append("</ul>")
                 in_list = False

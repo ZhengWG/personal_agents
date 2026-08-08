@@ -18,7 +18,7 @@ fetched text; a candidate is auto-promoted to `tracked` once it's seen in
 anytime — `tracked[].prs=false` makes a high-volume repo releases-only.
 
 Usage:
-    python3 fetch_sources.py [--mode daily|range] [--since 2d|6mo|1y|YYYY-MM-DD]
+    python3 agent.py fetch [--mode daily|range] [--since 2d|6mo|1y|YYYY-MM-DD]
                              [--config PATH] [--no-update-repos] [--pretty]
 """
 
@@ -34,10 +34,15 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+try:
+    from . import paths, http as _http
+except ImportError:  # 直接执行本文件时
+    import paths, http as _http
 from xml.etree import ElementTree as ET
 
 UA = "ai-infra-agent/0.3 (+https://github.com/personal-agents)"
-CONFIG_PATH = "ai-infra-agent/config/repos.json"
+CONFIG_PATH = paths.REPOS_JSON
 
 # Fallback repo spine if the config file is missing.
 DEFAULT_TRACKED = [
@@ -87,17 +92,12 @@ INFRA_KW = re.compile(
 
 
 def warn(msg: str) -> None:
-    print(f"[fetch_sources] {msg}", file=sys.stderr)
+    print(f"[fetch] {msg}", file=sys.stderr)
 
 
-def http_get(url: str, headers: dict | None = None, timeout: int = 30) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # uses env proxies
-        return r.read()
-
-
-def http_json(url: str, headers: dict | None = None) -> object:
-    return json.loads(http_get(url, headers))
+# HTTP 走共享层（带重试 + 退避），函数名保持不变，调用点无需改动
+http_get = _http.get
+http_json = _http.get_json
 
 
 def parse_since(s: str) -> str:

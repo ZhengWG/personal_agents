@@ -1,13 +1,12 @@
 # personal_agents
 
-个人自动化 Agent 集合。用 **Claude CLI + crontab** 把重复的日报/周报工作交给 Agent，定时跑、自动发。
+个人自动化 Agent 集合。用 **Claude CLI + launchd** 把重复的日报工作交给 Agent，定时跑、自动发。
 
 ## 🧩 Agents
 
 | Agent | 触发 | 功能 | 详情 |
 |-------|------|------|------|
-| [daily-ai-infra](./ai-infra-agent/) | 每天 09:00 | 抓 SGLang / vLLM / vLLM-Omni / SGLang-Omni 的 PR + arXiv + 博客 + Reddit，SMTP 发邮件 | [部署文档](./ai-infra-agent/README.md) |
-| weekly-report | 每周四 17:00 | 从语雀知识库读最新一周的工作文档，整理周报并写回语雀 | [skill](.claude/skills/weekly-report.md)（文档待补） |
+| [daily-ai-infra](./ai-infra-agent/) | 每天 09:00 | 核心盘（23 个推理仓 PR/Release + arXiv + 博客 + HN/Reddit）+ 拓源（Trending / awesome 增量 / 新术语），SMTP 发邮件 | [部署文档](./ai-infra-agent/README.md) |
 
 每个 agent 的部署、配置、排障请看自己的 README。本文件只讲**整个仓库共享的底座**。
 
@@ -16,16 +15,24 @@
 所有 agent 共用同一个运行模型：
 
 ```
-crontab
-  └─ scripts/<agent>-cron.sh     # 加载 nvm PATH / NO_PROXY
-       └─ claude --print -p "按 .claude/skills/<agent>.md 执行..."
-              └─ .claude/skills/<agent>.md   # 抓取步骤 + 分类规则 + 输出格式
-                     ├─ WebFetch / curl     # 公开源
-                     ├─ yuque-cli           # 内网知识库（走 ~/.identitymcp）
-                     └─ scripts/send_mail.py # 通用 SMTP 发信
+launchd  (scripts/install-schedule.sh <agent> 安装)
+  └─ <agent>/run.sh                      # agent 的唯一入口（daily / --since range）
+       └─ source scripts/_env.sh         # 共享：PATH / 代理 / proxy_ok / run_claude
+            └─ claude --print -p "按 .claude/skills/<agent>.md 执行..."
+                   └─ .claude/skills/<agent>.md    # 步骤 + 分类规则 + 输出格式（流程真值）
+                          ├─ <agent>/agent.py <verb>   # 该 agent 的唯一 CLI
+                          ├─ WebFetch / WebSearch      # 公开源 + novelty 搜索
+                          └─ scripts/send_mail.py      # 共享 SMTP 发信
 ```
 
-新增 agent 只需：**写一个 skill + 一个 cron 脚本 + 追加一行 crontab**。
+**分层原则**：`scripts/` 只放**跨 agent 共享**的东西（环境、发信、定时安装器）；
+每个 agent 的抓取/处理逻辑全部收在自己目录里，**一个 `run.sh` + 一个 `agent.py`**。
+加第二个 agent 不会让 `scripts/` 继续膨胀。
+
+**shell 不碰数据**：cron 脚本只负责搭环境 + 兜底告警，真正的流程真值只住在 skill 里一份，
+数据脚本由 Claude 按 skill 步骤调用。
+
+新增 agent 只需：**写一个 skill + 一个 cron 脚本（source `_env.sh`）+ 装一条 launchd**。
 
 ## 📂 顶层结构
 
@@ -36,11 +43,21 @@ personal_agents/
 ├── .gitignore                # 屏蔽 logs/ reports/ *.env
 │
 ├── .claude/skills/           # 所有 agent 的任务定义
-├── scripts/                  # 所有 agent 的 cron 入口 + 共享工具（send_mail.py）
 ├── logs/                     # 所有 agent 的运行日志
 │
-├── ai-infra-agent/           # daily-ai-infra 的数据 + README
-└── weekly-yuque-agent/       # weekly-report 的数据
+├── scripts/                  # 共享底座，只有 3 个文件
+│   ├── _env.sh               #   PATH / 代理 / proxy_ok / run_claude
+│   ├── send_mail.py          #   通用 SMTP 发信
+│   └── install-schedule.sh   #   通用 launchd 安装器
+│
+└── ai-infra-agent/           # 一个 agent = 一个自包含目录
+    ├── run.sh                #   唯一入口（launchd 调它；--since 走回顾模式）
+    ├── agent.py              #   唯一 CLI：fetch/dedup/discover/fallback/stats
+    ├── pipeline/             #   实现（paths 集中解析，不依赖 cwd）
+    ├── config/               #   repos.json（机器可读）+ sources.md（人类可读记忆）
+    ├── state/                #   seen.json / pending.json / discover.json
+    ├── reports/              #   YYYY-MM-DD.md
+    └── README.md
 ```
 
 ## 🔧 共享工具
@@ -55,55 +72,59 @@ python3 scripts/send_mail.py path/to/report.md
 
 凭证统一读 `~/.config/ai-infra-agent/mail.env`（perm 600）。支持任意 SMTP 提供商——465 走 SSL，其他端口走 STARTTLS，**换邮箱只改环境文件，不改代码**。配置细节见 [ai-infra-agent/README.md](./ai-infra-agent/README.md#3-准备发信凭证二选一)。
 
-### cron 脚本模板
+### `scripts/_env.sh` — 共享运行环境
 
-所有 `scripts/*-cron.sh` 遵循同一套 boilerplate：
+每个 agent 的 `run.sh` 第一件事就是 source 它。**改 PATH / 代理 / 证书只改这一处**
+（以前是三份复制粘贴的 boilerplate，已经漂移过）：
 
 ```bash
-#!/bin/bash
-set -euo pipefail
+#!/bin/zsh
+set -uo pipefail
+source "${0:A:h}/../scripts/_env.sh"   # 同时设好 $REPO
+cd "$REPO" || exit 1
 
-# 1. 加载 nvm PATH（cron 不走 .zshrc）
-export NVM_DIR="$HOME/.nvm"
-_nvm_bin="$(ls -d "$NVM_DIR/versions/node/"*/bin 2>/dev/null | sort -V | tail -1)"
-[ -d "$_nvm_bin" ] && export PATH="$_nvm_bin:$PATH"
-
-# 2. 代理豁免（如需访问内网）
-export NO_PROXY="localhost,*.alipay.com,*.antfin.com,..."
-
-# 3. 日志重定向
-LOG="$HOME/Projects/personal_agents/logs/<agent>-$(date +%Y%m%d-%H%M%S).log"
-
-# 4. 驱动 Claude CLI 执行 skill
-cd "$HOME/Projects/personal_agents"
-claude --print --dangerously-skip-permissions \
-  -p "按 .claude/skills/<agent>.md 执行..." >> "$LOG" 2>&1
+if ! proxy_ok; then ... fi                    # 代理预检
+run_claude 1200 "按 .claude/skills/<agent>.md 执行..."   # 带看门狗调 claude
 ```
+
+它解决的几个具体坑（都实测确认过）：
+
+| 坑 | `_env.sh` 的处理 |
+|---|---|
+| launchd 的 PATH 只有 `/bin:/usr/bin:/usr/ucb:/usr/local/bin` | 显式加 `~/.local/bin`（claude）和 node |
+| node 可能是 nvm 也可能是 Homebrew | 按顺序探测，不假设 |
+| 交互式 shell 里没有代理变量，直连 API 会 403 | 显式 export（这里是唯一来源） |
+| `timeout` 是 Homebrew coreutils，干净 PATH 里没有 | `run_claude` 自带 `sleep + kill` 看门狗 |
+| `source ~/.zshrc` 在非交互 shell 会中途中断 | 完全不 source，自包含 |
 
 ## 🚀 新增一个 Agent（工程范式）
 
-1. 写 skill：`.claude/skills/<name>.md`，定义信息源、步骤、输出格式
-2. 写 cron 脚本：`scripts/<name>-cron.sh`，套用上方模板
-3. 发邮件/写语雀？复用 `scripts/send_mail.py` / `yuque-cli`
-4. 装 crontab：`crontab -e` 追加 `M H * * * /abs/path/to/scripts/<name>-cron.sh`
+1. 建目录 `<name>-agent/`，写 `run.sh`（**必须 source `../scripts/_env.sh`**）+ `agent.py`
+2. 写 skill：`.claude/skills/<name>.md`，定义信息源、步骤、输出格式
+3. 要发邮件？复用 `scripts/send_mail.py`（不要各自实现）
+4. 装定时：`scripts/install-schedule.sh <name>-agent --at HH:MM`（launchd，**不要用 crontab**）
 5. 写 agent 自己的 README（参考 [ai-infra-agent/README.md](./ai-infra-agent/README.md)）
 6. 登记顶层：更新本文件的 Agents 表 + [CLAUDE.md](./CLAUDE.md) 的 skills 列表
 
 ## 🔍 常用操作
 
 ```bash
-crontab -l                                  # 看当前调度
-~/Projects/personal_agents/scripts/daily-ai-infra-cron.sh   # 手工触发
-ls -t logs/daily-ai-infra-*.log | head -1 | xargs less      # 看最近日志
-crontab -e                                  # 编辑/暂停某个 agent
+scripts/install-schedule.sh ai-infra-agent --status     # 看调度状态 + 最近日志
+ai-infra-agent/run.sh                                   # 手工触发（走完整定时路径）
+ai-infra-agent/run.sh --since 6mo                       # 主题趋势回顾报告
+python3 ai-infra-agent/agent.py --help                  # 看该 agent 的所有子命令
+python3 ai-infra-agent/agent.py discover --no-record --pretty   # 单独看今天拓源探到什么
+python3 ai-infra-agent/agent.py stats <报告> --budget 20        # 量阅读时间
+ls -t logs/daily-ai-infra-*.log | head -1 | xargs less  # 看最近日志
+scripts/install-schedule.sh ai-infra-agent --uninstall  # 暂停调度
 ```
 
 ## 🛡 安全
 
 - `.gitignore` 已屏蔽 `logs/` `ai-infra-agent/reports/` `**/*.env`——**不要 commit 凭证**
 - SMTP 凭证放 `~/.config/ai-infra-agent/mail.env`（perm 600），**不在 repo 里**
-- 语雀登录态在 `~/.identitymcp`，**不在 repo 里**
-- macOS 需给 `/usr/sbin/cron` 配 Full Disk Access，否则 cron 读不到 `~/.claude/` 登录态
+- 拓源注册表 `ai-infra-agent/config/sources.md` **只存源与术语，不存任何凭据**
+- 用 launchd 而非 cron，顺带绕开了「给 `/usr/sbin/cron` 配 Full Disk Access」这个要求
 
 ## 📎 依赖
 
