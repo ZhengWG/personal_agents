@@ -13,6 +13,22 @@
   - **入口只有一个** `ai-infra-agent/run.sh`；**CLI 只有一个** `ai-infra-agent/agent.py <verb>`。
     `scripts/` 里只放跨 agent 共享的三样：`_env.sh` / `send_mail.py` / `install-schedule.sh`。
 
+- `/vllm-rebase` — 每天 07:40 在隔离 worktree 里演练 `vllm-ant` / `vllm-omni-ant` 的 Ant delta
+  rebase，提前暴露冲突 / 掉 patch / delta 漂移。**只读，不推送**。
+  - **两种模式**：`agent.py run` 是 radar（遇冲突 skip 继续，一轮看全冲突面）；
+    `agent.py resolve` 是逐个解（停下等 Claude 解完再走，产出完整候选分支）。
+    每天两遍都跑 —— delta 对齐只有在 rebase 真正跑完时才有意义。
+  - **机械与判断分离**：`agent.py` 只做 git 动作和记录，怎么解冲突交给 Claude 读
+    各仓库自带的 `ant-release-rebase` skill（每轮从 `ant/public_tracker` 抠到
+    `state/playbook/<仓库名>/`，两个仓库的 playbook **不通用，且会过期，必须复核**）。
+  - **解冲突没有 skip 这个动作**：解不动只能 `stop` 交人工，让 patch 退役只能 `drop`
+    并写明依据。冲突标记残留、空 commit、没报备的 untracked 都会被工具拒绝。
+  - **绝不碰主 checkout**：所有动作在 `~/.cache/vllm-rebase-agent/<仓库名>/` 的
+    detached worktree 里；分析步骤的 Claude 也不许改仓库，只能改报告的分析段。
+  - 六个反直觉的坑（rebase 交换 ours/theirs、source 落后 main 时对齐检查无意义、
+    py3.9 对 vLLM 的语法误报、内网远端不能抓 tag、tag 排序、一次跑到底）
+    都写在 [vllm-rebase-agent/README.md](./vllm-rebase-agent/README.md)，**改代码前先看**。
+
 ## 环境说明
 
 - **所有环境设置集中在 `scripts/_env.sh`**，被各 agent 的 `run.sh` source。改 PATH/代理/证书只改这一处。

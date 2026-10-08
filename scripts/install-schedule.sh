@@ -62,6 +62,9 @@ command -v claude >/dev/null 2>&1 \
 
 mkdir -p "$HOME/Library/LaunchAgents" "$REPO/logs"
 
+# 这里用 `|| exit` 兜底：macOS 13+ 把 ~/Library/LaunchAgents 纳入 TCC 保护，
+# 没给终端「完全磁盘访问权限」时写入会 Operation not permitted。以前这条失败了
+# 后面照样打印「已安装」，等到点没触发才发现根本没装上。
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,6 +89,13 @@ cat > "$PLIST" <<PLISTEOF
 </dict>
 </plist>
 PLISTEOF
+
+if [ ! -s "$PLIST" ]; then
+  echo "✗ 写不了 ${PLIST}" >&2
+  echo "  macOS 保护着 ~/Library/LaunchAgents。给终端开「系统设置 → 隐私与安全性 →" >&2
+  echo "  完全磁盘访问权限」后重试，或直接在你自己的终端里跑这条安装命令。" >&2
+  exit 1
+fi
 
 launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null   # 幂等：先卸再装
 launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null \

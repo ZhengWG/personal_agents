@@ -23,3 +23,7 @@ venv/
 # Editor
 .vscode/
 .idea/
+
+# vllm-rebase-agent runtime state / reports (machine-local)
+vllm-rebase-agent/state/
+vllm-rebase-agent/reports/

@@ -7,6 +7,7 @@
 | Agent | 触发 | 功能 | 详情 |
 |-------|------|------|------|
 | [daily-ai-infra](./ai-infra-agent/) | 每天 09:00 | 核心盘（23 个推理仓 PR/Release + arXiv + 博客 + HN/Reddit）+ 拓源（Trending / awesome 增量 / 新术语），SMTP 发邮件 | [部署文档](./ai-infra-agent/README.md) |
+| [vllm-rebase](./vllm-rebase-agent/) | 每天 07:40 | 在隔离 worktree 里把 `vllm-ant` / `vllm-omni-ant` 的 Ant delta 演练 rebase 到最新社区 main 和最新 release tag，提前暴露冲突、掉 patch、delta 漂移，并按 playbook 自动解冲突产出本地候选分支（不推送）；落报告 + macOS 通知 | [部署文档](./vllm-rebase-agent/README.md) |
 
 每个 agent 的部署、配置、排障请看自己的 README。本文件只讲**整个仓库共享的底座**。
 
@@ -50,6 +51,14 @@ personal_agents/
 │   ├── _env.sh               #   PATH / 代理 / proxy_ok / run_claude
 │   ├── send_mail.py          #   通用 SMTP 发信
 │   └── install-schedule.sh   #   通用 launchd 安装器
+│
+├── vllm-rebase-agent/        # 每日 rebase 演练（只读，不推送）
+│   ├── run.sh                #   唯一入口
+│   ├── agent.py              #   唯一 CLI：run/render/notify/status/playbook
+│   ├── pipeline/             #   gitutil / tasks / resolve / verify / report / paths
+│   ├── config/tasks.json     #   仓库 + 三个任务 + 推送开关
+│   ├── state/                #   last-run.json + 各仓库抠出来的 playbook
+│   └── reports/              #   YYYY-MM-DD.md
 │
 └── ai-infra-agent/           # 一个 agent = 一个自包含目录
     ├── run.sh                #   唯一入口（launchd 调它；--since 走回顾模式）
@@ -135,6 +144,10 @@ python3 ai-infra-agent/agent.py --help                  # 看该 agent 的所有
 python3 ai-infra-agent/agent.py discover --no-record --pretty   # 单独看今天拓源探到什么
 python3 ai-infra-agent/agent.py stats <报告> --budget 20        # 量阅读时间
 ls -t logs/daily-ai-infra-*.log | head -1 | xargs less  # 看最近日志
+
+vllm-rebase-agent/run.sh                                # 每日 rebase 演练（~8 分钟）
+python3 vllm-rebase-agent/agent.py status               # 看配置 + 上一轮结果
+scripts/install-schedule.sh vllm-rebase-agent --status  # 看它的调度状态
 scripts/install-schedule.sh ai-infra-agent --uninstall  # 暂停调度
 ```
 

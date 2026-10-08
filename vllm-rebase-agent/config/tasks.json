@@ -1,0 +1,68 @@
+{
+  "_comment": "每日 rebase agent 的唯一配置。加仓库 / 改分支名 / 开关推送只动这里，不动代码。",
+
+  "worktree_root": "~/.cache/vllm-rebase-agent",
+
+  "_push_note": "全局开关优先级最高：false 时无论各 task 的 push.enabled 写什么都不推。",
+  "push_enabled": false,
+
+  "notify": { "macos": true },
+
+  "_defaults_note": "每个 repo 没写的字段从这里继承。",
+  "defaults": {
+    "community_remote": "origin",
+    "ant_remote": "ant",
+    "community_main": "origin/main",
+    "delta_source": "ant/public_tracker",
+    "rc_tag_pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(rc[0-9]+)?$",
+    "playbook_ref": "ant/public_tracker",
+    "tasks": [
+      {
+        "name": "tracker",
+        "kind": "merge",
+        "desc": "把最新社区 main 合进 public_tracker（沿用既有 merge 模式）",
+        "onto": "@main",
+        "source": "@delta_source",
+        "push": { "enabled": true, "force": false, "ref": "public_tracker" }
+      },
+      {
+        "name": "daily",
+        "kind": "rebase",
+        "desc": "把 Ant delta rebase 到最新社区 main",
+        "onto": "@main",
+        "source": "@tracker_result",
+        "source_fallback": "@delta_source",
+        "push": { "enabled": true, "force": true, "ref": "public_tracker_daily" }
+      },
+      {
+        "name": "release",
+        "kind": "rebase",
+        "desc": "把 Ant delta rebase 到最新 RC tag（release 分支预演）",
+        "onto": "@latest_rc",
+        "source": "@tracker_result",
+        "source_fallback": "@delta_source",
+        "push": { "enabled": true, "force": true, "ref": "ant/releases/{rc}-daily" }
+      }
+    ]
+  },
+
+  "repos": [
+    {
+      "name": "vllm-ant",
+      "repo": "/Users/zheng/Projects/workspaces/vllm-ant",
+      "playbook_files": [
+        ".claude/skills/ant-release-rebase/SKILL.md"
+      ]
+    },
+    {
+      "name": "vllm-omni-ant",
+      "repo": "/Users/zheng/Projects/workspaces/vllm-omni-ant",
+      "playbook_files": [
+        ".claude/skills/ant-release-rebase/SKILL.md",
+        ".claude/skills/ant-release-rebase/references/conflict-playbook-v0.23.0.md",
+        ".claude/skills/ant-release-rebase/references/conflict-playbook-v0.24.0.md",
+        ".claude/skills/ant-release-rebase/references/verification.md"
+      ]
+    }
+  ]
+}
