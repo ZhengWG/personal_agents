@@ -14,7 +14,8 @@
 #   L3  agent.py 自己就失败了                 → 告警通知 + 日志
 set -uo pipefail
 
-source "${0:A:h:h}/scripts/_env.sh"      # 共享底座：PATH / 代理 / proxy_ok / run_claude；同时设好 $REPO
+source "${0:A:h:h}/scripts/_env.sh"
+export VLLM_REBASE_OWNER="launchd-$$"     # resolve 会话租约的占用者标签，和手工操作区分开      # 共享底座：PATH / 代理 / proxy_ok / run_claude；同时设好 $REPO
 cd "$REPO" || exit 1
 
 AGENT_DIR="${0:A:h}"

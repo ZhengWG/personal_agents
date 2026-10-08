@@ -171,15 +171,36 @@ def _settle(sess, wt, rc, text):
     return _conflict_view(wt, sess)
 
 
-def _owner_alive(state):
-    pid = state.get("owner_pid")
-    if not pid:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
+# 租约而不是 PID：每次 `agent.py resolve ...` 都是一个新的短命进程，它的父进程
+# 也只是一个转瞬即逝的 shell。按 PID 判活等于没锁 —— 2026-10-08 定时任务就这样
+# 接管了一个手工开着的会话，两边交错改同一棵 worktree。
+LEASE_SECONDS = 30 * 60
+
+
+def owner_tag():
+    """定时任务由 run.sh 注入 VLLM_REBASE_OWNER=launchd-<pid>；手工调用默认 manual。"""
+    return os.environ.get("VLLM_REBASE_OWNER", "manual")
+
+
+def lease_holder(state=None):
+    """当前持有租约的占用者；没有活跃会话或租约已过期时返回 None。"""
+    state = state if state is not None else _load()
+    if not state.get("current"):
+        return None
+    beat = state.get("owner_heartbeat")
+    if not beat:
+        return None
+    age = (datetime.datetime.now() - datetime.datetime.fromisoformat(beat)).total_seconds()
+    if age > LEASE_SECONDS:
+        return None
+    return state.get("owner_tag")
+
+
+def _check_lease(force=False):
+    holder = lease_holder()
+    if holder and holder != owner_tag() and not force:
+        raise GitError("会话 %s 正被 %s 占用（%d 分钟内有活动），拒绝操作；确认对方已结束可加 --force"
+                       % (_load().get("current"), holder, LEASE_SECONDS // 60))
 
 
 def start(cfg, repo_name, task_name, source=None, force=False, onto=None):
@@ -189,11 +210,7 @@ def start(cfg, repo_name, task_name, source=None, force=False, onto=None):
     # 手工 resolve 和 launchd 那轮同时跑，状态文件被覆盖）。持锁进程还活着就拒绝。
     # 锁的主人是调用 agent.py 的父进程链上的长寿进程 —— 用 PPID（Claude/shell），
     # 因为每次 `agent.py resolve ...` 都是一个新的短命 python 进程。
-    prev = _load()
-    busy = prev.get("current")
-    if busy and not force and _owner_alive(prev) and prev.get("owner_pid") != os.getppid():
-        raise GitError("会话 %s 正被进程 %s 占用，拒绝开新会话（确认对方已死可加 --force）"
-                       % (busy, prev.get("owner_pid")))
+    _check_lease(force)
     wt = repo_cfg["worktree"]
     g.ensure_worktree(repo_cfg["repo"], wt, repo_cfg["community_main"])
 
@@ -226,7 +243,8 @@ def start(cfg, repo_name, task_name, source=None, force=False, onto=None):
 
     view = _settle(sess, wt, rc, text)
     state = _load()
-    state["owner_pid"] = os.getppid()
+    state["owner_tag"] = owner_tag()
+    state["owner_heartbeat"] = _now()
     state["current"] = "%s/%s" % (repo_name, task_name)
     state["sessions"][state["current"]] = sess
     _save(state)
@@ -235,7 +253,9 @@ def start(cfg, repo_name, task_name, source=None, force=False, onto=None):
 
 
 def _current(cfg):
+    _check_lease()
     state = _load()
+    state["owner_heartbeat"] = _now()
     key = state.get("current")
     if not key or key not in state["sessions"]:
         raise GitError("没有进行中的 resolve 会话，先跑 `resolve start`")

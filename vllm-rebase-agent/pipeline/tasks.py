@@ -304,6 +304,13 @@ def extract_playbook(repo_cfg, dest):
 
 
 def run_repo(cfg, repo_cfg):
+    # radar 也会 reset 同一棵 worktree，必须和 resolve 会话共用同一把租约。
+    from . import resolve
+    holder = resolve.lease_holder()
+    if holder and holder != resolve.owner_tag():
+        return {"name": repo_cfg["name"], "repo": repo_cfg["repo"], "fetch": {}, "latest_rc": None,
+                "tasks": [], "playbook": [],
+                "error": "worktree 正被 %s 的 resolve 会话占用，本轮跳过（避免互相 reset）" % holder}
     result = {
         "name": repo_cfg["name"],
         "repo": repo_cfg["repo"],
