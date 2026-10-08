@@ -22,6 +22,20 @@ def _norm_subject(subject):
     return re.sub(r"\s*\(#\d+\)\s*$", "", subject).strip()
 
 
+def _upstream_subject(subject):
+    """内部 PR 合入时会加 `PullRequest: 56 ` 前缀，和上游同一个 PR 的标题就对不上了。
+
+    实测：omni 的 PR56 与上游 #7245 标题只差这个前缀，却被误报成 release 独有。
+    """
+    return re.sub(r"^PullRequest:\s*\d+\s+", "", subject).strip()
+
+
+def _defined_names(repo, sha):
+    body = g.out(["show", "--format=", sha], repo)
+    # 用 [ \t] 而不是 \s：\s 会吃掉换行，把「+ 空行」后面那行上下文里的 def 也算成新增。
+    return sorted(set(re.findall(r"^\+[ \t]*(?:async[ \t]+)?def[ \t]+(\w+)[ \t]*\(", body, re.M)))
+
+
 def _release_branches(repo, remote, prefix):
     rows = []
     ref_prefix = "refs/remotes/%s/%s" % (remote, prefix)
@@ -55,8 +69,17 @@ def _added_lines(repo, sha):
 
 def _upstream_has(repo, community_main, sha, subject):
     """这个提交是不是上游 PR 的 backport —— 是的话新 base 自带，不算缺口。"""
-    if subject and g.out(["log", "-1", "--format=%h", "-F", "--grep", subject, community_main], repo):
+    up_subject = _upstream_subject(subject)
+    if up_subject and g.out(["log", "-1", "--format=%h", "-F", "--grep", up_subject, community_main], repo):
         return True, "上游有同名提交"
+    # 上游合同一个修复时常改标题、改注释，逐行比对会失手（实测 omni 的 SHM 回收：
+    # 上游 #8082 换了标题，新增行只命中 2/12，但五个新方法名一个不差）。
+    names = _defined_names(repo, sha)
+    # git grep -E 是 POSIX ERE，macOS 上不认 \s，必须写 [[:space:]]。
+    if names and all(g.git(["grep", "-q", "-E", r"def[[:space:]]+%s[[:space:]]*\(" % n, community_main, "--"],
+                           repo, check=False)[0] == 0 for n in names):
+        return True, "新增函数 %d/%d 已在上游（%s），需人工确认实现等价" % (
+            len(names), len(names), ", ".join(names[:4]))
     lines = _added_lines(repo, sha)
     if not lines:
         return False, ""
