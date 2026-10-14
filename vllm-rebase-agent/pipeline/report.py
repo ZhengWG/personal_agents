@@ -24,6 +24,7 @@ STATUS_TEXT = {
 }
 
 ANALYSIS_MARKER = "<!-- claude-analysis -->"
+ANALYSIS_PLACEHOLDER = "_（这一节由 Claude 按 ant-release-rebase skill 填写；为空说明这一轮没跑到分析步骤。）_"
 
 
 def _badge(status):
@@ -331,6 +332,6 @@ def render(run):
     out.append("")
     out.append(ANALYSIS_MARKER)
     out.append("")
-    out.append("_（这一节由 Claude 按 ant-release-rebase skill 填写；为空说明这一轮没跑到分析步骤。）_")
+    out.append(ANALYSIS_PLACEHOLDER)
     out.append("")
     return "\n".join(out)

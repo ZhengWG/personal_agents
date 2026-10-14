@@ -92,6 +92,28 @@ def _run_one(cfg, repo_cfg, skip_fetch=False):
         tasks.g.fetch = original
 
 
+def _keep_analysis(target, body):
+    """render 重写整个报告，Claude 已填的「分析与建议」要原样留住。
+
+    run.sh 在 claude 结束后还会无条件 render 一次刷新事实部分，少了这一步
+    就会把当轮刚写好的分析冲成占位符（10-09 到 10-13 每天都发生）。
+    """
+    if not os.path.exists(target):
+        return body
+    with open(target, encoding="utf-8") as fh:
+        old = fh.read()
+    head, sep, kept = old.partition(report.ANALYSIS_MARKER)
+    if not sep:
+        return body
+    kept = kept.strip()
+    if not kept or kept == report.ANALYSIS_PLACEHOLDER:
+        return body
+    head, sep, _ = body.partition(report.ANALYSIS_MARKER)
+    if not sep:
+        return body
+    return "%s%s\n\n%s\n" % (head, sep, kept)
+
+
 def cmd_render(args):
     run = paths.load_state()
     if not run:
@@ -103,6 +125,7 @@ def cmd_render(args):
         return 0
     target = paths.report_path(args.date or run["date"])
     os.makedirs(paths.REPORT_DIR, exist_ok=True)
+    body = _keep_analysis(target, body)
     with open(target, "w", encoding="utf-8") as fh:
         fh.write(body)
     print(target)
