@@ -110,8 +110,13 @@ commit_dedup() { $PY "$AGENT" dedup --commit 2>&1 || true; }
 
   elif fresh "$FETCH_JSON"; then
     echo "L3 降级：无可用报告，用 ${FETCH_JSON} 生成原始条目报告"
-    if $PY "$AGENT" fallback --from "$FETCH_JSON" \
-         ${DISCOVER_JSON:+--discover "$DISCOVER_JSON"} \
+    # 可选参数必须用数组传：zsh 默认不对变量展开做单词分割，写成
+    # ${DISCOVER_JSON:+--discover "$DISCOVER_JSON"} 会塞给 argparse 一个
+    # 带空格的单参数「--discover /tmp/x.json」，报 unrecognized arguments。
+    # 2026-10-13 降级首次真被触发时就栽在这里，日报没发出去。
+    discover_args=()
+    [ -n "$DISCOVER_JSON" ] && [ -s "$DISCOVER_JSON" ] && discover_args=(--discover "$DISCOVER_JSON")
+    if $PY "$AGENT" fallback --from "$FETCH_JSON" "${discover_args[@]}" \
          --reason "claude 在总结阶段被中断（退出码 ${rc}）" --out "$REPORT"; then
       if $PY "${REPO}/scripts/send_mail.py" "$REPORT"; then
         commit_dedup; notify "已发降级报告（原始条目）"
