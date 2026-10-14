@@ -132,6 +132,65 @@ def cmd_render(args):
     return 0
 
 
+def cmd_push(args):
+    """把解完冲突的候选树推上去 —— run.sh 在 claude 正常结束后调这一步。
+
+    和 run 阶段的推送是两回事：那一步只能推"机械重放就干净"的任务，而
+    daily/release 从来没干净过。这一步推的是人（Claude）解完之后的产物，
+    所以闸门更严：除了验收全过，还要求没有交人工、没有低自信解法。
+
+    不可逆的一步放在 run.sh 里由脚本调用，而不是让 claude 自己推 ——
+    解冲突的和决定推不推的不该是同一个。
+    """
+    cfg = paths.load_config()
+    run = paths.load_state()
+    if not run:
+        sys.exit("还没有跑过（%s 不存在）" % paths.STATE_FILE)
+
+    sess_all = resolve.sessions()
+    push_enabled = cfg.get("push_enabled", False)
+    by_name = {r["name"]: r for r in cfg["repos"]}
+
+    pushed = blocked = 0
+    for repo_result in run.get("repos", []):
+        repo_cfg = by_name.get(repo_result.get("name"))
+        if not repo_cfg:
+            continue
+        ctx = {"latest_rc": repo_result.get("latest_rc")}
+        for task in repo_cfg["tasks"]:
+            if args.task and task["name"] not in args.task:
+                continue
+            key = "%s/%s" % (repo_cfg["name"], task["name"])
+            sess = sess_all.get(key)
+
+            if args.dry_run:
+                blockers = tasks.resolved_push_blockers(
+                    sess, task.get("push") or {}, push_enabled)
+                mark = "推" if not blockers else "跳过"
+                print("[%s] %s%s" % (mark, key,
+                                     "" if not blockers else " —— " + "；".join(blockers)))
+                continue
+
+            result = tasks.push_resolved(repo_cfg, task, sess, ctx, push_enabled)
+            # 回写进 last-run.json，让报告里「推送」那一行反映的是最终结果，
+            # 而不是机械阶段那句"结果不是 clean，拒绝推送"。
+            for entry in repo_result.get("tasks", []):
+                if entry.get("name") == task["name"]:
+                    entry["push"] = result
+                    break
+            if result["done"]:
+                pushed += 1
+                print("[已推] %s → %s (%s)" % (key, result["ref"], result["head"][:10]))
+            else:
+                blocked += 1
+                print("[未推] %s —— %s" % (key, result["reason"]))
+
+    if not args.dry_run:
+        paths.save_state(run)
+        print("\n推送 %d 个，未推 %d 个" % (pushed, blocked))
+    return 0
+
+
 def cmd_notify(args):
     run = paths.load_state()
     if not run:
@@ -240,6 +299,11 @@ def main():
     notify.add_argument("--message", help="自定义正文")
     notify.add_argument("--quiet-when-clean", action="store_true", help="全绿就不打扰")
     notify.set_defaults(func=cmd_notify)
+
+    push = sub.add_parser("push", help="推解完冲突的候选树（run.sh 在 claude 成功后调）")
+    push.add_argument("--task", action="append", help="只推指定任务（可重复）")
+    push.add_argument("--dry-run", action="store_true", help="只列出推/不推和原因")
+    push.set_defaults(func=cmd_push)
 
     status = sub.add_parser("status", help="看配置和上一轮结果")
     status.set_defaults(func=cmd_status)

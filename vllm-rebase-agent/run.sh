@@ -71,6 +71,15 @@ print(report.severity(paths.load_state()))
     if [ "$crc" -ne 0 ]; then
       $PY "$AGENT" resolve abort >/dev/null 2>&1 || true
     fi
+
+    # 推送解完冲突的候选树。只在 claude 正常收尾时做 —— 它中途被 kill 的话
+    # 候选树可能只重放了一半，而 verified 还是上一次的值。
+    # 不可逆的一步由脚本调，不交给 claude 自己：解冲突的和决定推不推的不该是同一个。
+    # 放在 render 之前，报告里「推送」那一行才是最终结果而不是机械阶段的拒绝理由。
+    if [ "$crc" -eq 0 ]; then
+      $PY "$AGENT" push 2>&1 || true
+    fi
+
     $PY "$AGENT" render >/dev/null 2>&1 || true
 
     if [ "$crc" -eq 0 ]; then

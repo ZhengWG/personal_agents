@@ -4,6 +4,7 @@
   "worktree_root": "~/.cache/vllm-rebase-agent",
 
   "_push_note": "全局开关优先级最高：false 时无论各 task 的 push.enabled 写什么都不推。",
+  "_after_resolve_note": "after_resolve 决定「Claude 解完冲突的产物」能不能自动推（agent.py push）。daily/release 是一次性演练分支，每天 force 覆盖，解错了明天自动重来，所以可以自动推；tracker 是 merge 节点，解法会沉进 public_tracker 的历史、成为往后每轮 rebase 的 delta 来源，错一次天天带着，所以永远人工。无论这里写什么，有低自信解法或交人工的任务都不推。",
   "push_enabled": false,
 
   "notify": { "macos": true },
@@ -23,7 +24,7 @@
         "desc": "把最新社区 main 合进 public_tracker（沿用既有 merge 模式）",
         "onto": "@main",
         "source": "@delta_source",
-        "push": { "enabled": true, "force": false, "ref": "public_tracker" }
+        "push": { "enabled": true, "force": false, "ref": "public_tracker", "after_resolve": false }
       },
       {
         "name": "daily",
@@ -32,7 +33,7 @@
         "onto": "@main",
         "source": "@tracker_result",
         "source_fallback": "@delta_source",
-        "push": { "enabled": true, "force": true, "ref": "public_tracker_daily" }
+        "push": { "enabled": true, "force": true, "ref": "public_tracker_daily", "after_resolve": true }
       },
       {
         "name": "release",
@@ -41,7 +42,7 @@
         "onto": "@latest_rc",
         "source": "@tracker_result",
         "source_fallback": "@delta_source",
-        "push": { "enabled": true, "force": true, "ref": "ant/releases/{rc}-daily" }
+        "push": { "enabled": true, "force": true, "ref": "ant/releases/{rc}-daily", "after_resolve": true }
       }
     ]
   },

@@ -282,6 +282,81 @@ def maybe_push(entry, task, repo_cfg, ctx, wt, push_enabled):
     }
 
 
+def resolved_push_blockers(sess, spec, push_enabled):
+    """列出拒绝推送解冲突产物的所有理由 —— 空列表才推。
+
+    全部列出而不是撞上第一条就返回：报告里要能一眼看清今天到底卡在哪几件事上，
+    只说第一条会让人修完一个又撞下一个。
+    """
+    out = []
+    if not push_enabled:
+        out.append("全局 push_enabled=false")
+    if not spec.get("enabled"):
+        out.append("该任务 push.enabled=false")
+    if not spec.get("after_resolve"):
+        out.append("该任务 after_resolve=false（解冲突产物按约定人工过目）")
+    if not sess:
+        out.append("本轮没有解冲突会话")
+        return out
+    if sess.get("state") != "finished":
+        out.append("会话状态是 %s，不是 finished" % sess.get("state"))
+    handoffs = sess.get("handoffs") or []
+    if handoffs:
+        out.append("有 %d 处交人工" % len(handoffs))
+    low = [r for r in (sess.get("resolutions") or []) if r.get("confidence") == "low"]
+    if low:
+        out.append("有 %d 处低自信解法" % len(low))
+    entry = sess.get("entry") or {}
+    if not entry.get("verified"):
+        failed = [c["name"] for c in entry.get("checks") or [] if not c["ok"]]
+        out.append("验收未通过：%s" % ("、".join(failed) if failed else "未跑验收"))
+    if not sess.get("head"):
+        out.append("会话没有记录 head")
+    return out
+
+
+def push_resolved(repo_cfg, task, sess, ctx, push_enabled):
+    """推 Claude 解完冲突的候选树。
+
+    为什么不能复用 maybe_push：它在机械阶段跑，那时有冲突的任务 status 还是
+    conflicts，第三道闸直接挡掉。而 daily/release 在 21 天里一次都没"机械就干净"
+    过 —— rebase 撞天天在变的上游本来就是常态。真正值得推的产物是解完之后的候选树。
+
+    推的是会话里记下的 head（一个确定的 sha），不是 worktree 的 HEAD：一个仓的
+    三个任务共用一棵 worktree，HEAD 停在最后跑完的那个任务上，拿它推会推错东西。
+    """
+    spec = task.get("push") or {}
+    blockers = resolved_push_blockers(sess, spec, push_enabled)
+    if blockers:
+        return {"done": False, "reason": "；".join(blockers)}
+
+    wt = repo_cfg["worktree"]
+    head = sess["head"]
+    ref = spec["ref"].format(rc=ctx.get("latest_rc") or "")
+    remote = repo_cfg["ant_remote"]
+
+    args = ["push", remote]
+    if spec.get("force"):
+        # --force-with-lease 带上期望值：别人在我们这轮开始之后推过东西就失败，
+        # 而不是把他的提交冲掉。
+        tracking = "%s/%s" % (remote, ref)
+        if g.ref_exists(tracking, wt):
+            args.append("--force-with-lease=refs/heads/%s:%s" % (ref, g.rev(tracking, wt)))
+        else:
+            args.append("--force-with-lease")
+    args.append("%s:refs/heads/%s" % (head, ref))
+
+    rc, text = g.git(args, wt, check=False, timeout=1800)
+    return {
+        "done": rc == 0,
+        "ref": ref,
+        "head": head,
+        "force": bool(spec.get("force")),
+        "after_resolve": True,
+        "reason": "ok" if rc == 0 else text[-800:],
+    }
+
+
 def extract_playbook(repo_cfg, dest):
     """把仓库里的 ant-release-rebase skill 抠出来存本地，给 Claude 读。
 
