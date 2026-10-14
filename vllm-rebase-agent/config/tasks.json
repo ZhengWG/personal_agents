@@ -5,7 +5,7 @@
 
   "_push_note": "全局开关优先级最高：false 时无论各 task 的 push.enabled 写什么都不推。",
   "_after_resolve_note": "after_resolve 决定「Claude 解完冲突的产物」能不能自动推（agent.py push）。daily/release 是一次性演练分支，每天 force 覆盖，解错了明天自动重来，所以可以自动推；tracker 是 merge 节点，解法会沉进 public_tracker 的历史、成为往后每轮 rebase 的 delta 来源，错一次天天带着，所以永远人工。无论这里写什么，有低自信解法或交人工的任务都不推。",
-  "push_enabled": false,
+  "push_enabled": true,
 
   "notify": { "macos": true },
 
