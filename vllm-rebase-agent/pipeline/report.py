@@ -44,6 +44,23 @@ def severity(run):
     return worst
 
 
+def push_failures(run):
+    """真跑了 git push 但没成功的任务 —— 被闸门挡下的不算。
+
+    区别在于 push 记录里有没有 ref：闸门拒绝时只写 reason（"有 1 处低自信解法"
+    之类），真推过才会带上 ref 和 head。这个要单独报，因为 severity() 只看
+    task status，推送失败不会改变它 —— 开了 push_enabled 之后如果不报，
+    force-with-lease 被挡、网络抖、权限不足都会静默，过几天才发现分支没动。
+    """
+    out = []
+    for repo in run.get("repos", []):
+        for task in repo.get("tasks", []):
+            push = task.get("push") or {}
+            if push.get("ref") and not push.get("done"):
+                out.append("%s/%s → %s" % (repo.get("name"), task.get("name"), push["ref"]))
+    return out
+
+
 def summary_line(run):
     bits = []
     for repo in run.get("repos", []):
@@ -54,7 +71,11 @@ def summary_line(run):
         for task in repo.get("tasks", []):
             parts.append("%s=%s" % (task["name"], STATUS_TEXT.get(task["status"], task["status"])))
         bits.append("%s: %s" % (repo["name"], " ".join(parts)))
-    return " | ".join(bits) or "没有任何仓库被处理"
+    line = " | ".join(bits) or "没有任何仓库被处理"
+    failed = push_failures(run)
+    if failed:
+        line += " ‖ 推送失败 %d 个：%s" % (len(failed), "、".join(failed))
+    return line
 
 
 def _task_block(out, repo, task):

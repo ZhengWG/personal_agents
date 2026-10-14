@@ -205,6 +205,10 @@ def cmd_notify(args):
         "error": "vLLM 每日 rebase 💥 执行失败",
         "skipped": "vLLM 每日 rebase ⏭️ 有跳过",
     }.get(worst, "vLLM 每日 rebase")
+    # 推送失败不进 severity（它只表达 rebase 结果），但必须让人在标题上看见，
+    # 否则开了 push_enabled 之后推不上去是无声的。
+    if report.push_failures(run):
+        title += " · 推送失败"
     body = args.message or report.summary_line(run)
     if args.quiet_when_clean and worst == "clean":
         print("clean，按 --quiet-when-clean 不打扰")
