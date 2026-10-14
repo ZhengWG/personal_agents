@@ -331,8 +331,11 @@ def resolve_continue(cfg, basis, confidence, note, allow_empty=False, add_paths=
                 "如果是落点挪了需要重贴，走 `resolve stop --reason '...'` 交给人。")
 
     # 先把"解的是哪个 commit"记下来 —— continue 之后 REBASE_HEAD 就变了。
+    # merge 会话没有 REBASE_HEAD，但 worktree 的 git 目录里可能残留着上一次
+    # rebase 留下的那个文件，不判 kind 就会把 merge 的解法记成某个旧 commit。
     record = {
-        "commit": (g.rebase_head(wt) or {"sha": "-", "subject": "merge"}),
+        "commit": ((g.rebase_head(wt) if sess["kind"] == "rebase" else None)
+                   or {"sha": "-", "subject": "merge"}),
         "files": entries,
         "basis": basis,
         "confidence": confidence,
