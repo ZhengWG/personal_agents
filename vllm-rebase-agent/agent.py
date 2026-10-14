@@ -156,7 +156,8 @@ def cmd_push(args):
         repo_cfg = by_name.get(repo_result.get("name"))
         if not repo_cfg:
             continue
-        ctx = {"latest_rc": repo_result.get("latest_rc")}
+        ctx = {"latest_rc": repo_result.get("latest_rc"),
+               "run_started": run.get("started")}
         for task in repo_cfg["tasks"]:
             if args.task and task["name"] not in args.task:
                 continue
@@ -165,7 +166,7 @@ def cmd_push(args):
 
             if args.dry_run:
                 blockers = tasks.resolved_push_blockers(
-                    sess, task.get("push") or {}, push_enabled)
+                    sess, task.get("push") or {}, push_enabled, run.get("started"))
                 mark = "推" if not blockers else "跳过"
                 print("[%s] %s%s" % (mark, key,
                                      "" if not blockers else " —— " + "；".join(blockers)))

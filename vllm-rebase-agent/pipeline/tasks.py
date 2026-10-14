@@ -282,11 +282,17 @@ def maybe_push(entry, task, repo_cfg, ctx, wt, push_enabled):
     }
 
 
-def resolved_push_blockers(sess, spec, push_enabled):
+def resolved_push_blockers(sess, spec, push_enabled, run_started=None):
     """列出拒绝推送解冲突产物的所有理由 —— 空列表才推。
 
     全部列出而不是撞上第一条就返回：报告里要能一眼看清今天到底卡在哪几件事上，
     只说第一条会让人修完一个又撞下一个。
+
+    `run_started` 用来判断会话是不是本轮的，和 run.sh 的 fresh() 同一个道理：
+    resolve.json 里躺着的会话可能是昨天留下的。claude "正常退出"但其实没跑
+    resolve（判断无需解冲突、或者只跑了 render 就收尾），照推就会把上一轮的
+    候选树推到远端。release 任务尤其隐蔽 —— 它的 onto 是 RC tag，tag 不变时
+    onto_sha 看着一致，但 head 还是昨天那棵。
     """
     out = []
     if not push_enabled:
@@ -300,6 +306,9 @@ def resolved_push_blockers(sess, spec, push_enabled):
         return out
     if sess.get("state") != "finished":
         out.append("会话状态是 %s，不是 finished" % sess.get("state"))
+    started = sess.get("started") or ""
+    if run_started and started < run_started:
+        out.append("会话不是本轮的（开始于 %s，本轮 %s）" % (started or "未知", run_started))
     handoffs = sess.get("handoffs") or []
     if handoffs:
         out.append("有 %d 处交人工" % len(handoffs))
@@ -326,7 +335,7 @@ def push_resolved(repo_cfg, task, sess, ctx, push_enabled):
     三个任务共用一棵 worktree，HEAD 停在最后跑完的那个任务上，拿它推会推错东西。
     """
     spec = task.get("push") or {}
-    blockers = resolved_push_blockers(sess, spec, push_enabled)
+    blockers = resolved_push_blockers(sess, spec, push_enabled, ctx.get("run_started"))
     if blockers:
         return {"done": False, "reason": "；".join(blockers)}
 
