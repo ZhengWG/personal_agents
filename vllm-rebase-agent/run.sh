@@ -33,13 +33,19 @@ LOG_FILE="$LOG_DIR/vllm-rebase-$(date +%Y%m%d-%H%M%S).log"
 
 notify() { /usr/bin/osascript -e "display notification \"$2\" with title \"$1\"" 2>/dev/null || true; }
 
+# 阶段计时。2026-10-14 那轮 START→END 用了 58 分钟，但日志里两点之间什么都没有，
+# 分不清是机械重放慢还是 claude 慢（当天 claude 其实是秒级失败的）。
+_T0=$(date +%s)
+stamp() { printf '[%s +%ds] %s\n' "$(date +%H:%M:%S)" "$(( $(date +%s) - _T0 ))" "$*"; }
+
 {
   echo "=== vllm-rebase START $(date -Iseconds) args=$* ==="
 
   # 机械部分不需要 claude、也不需要代理（git 走 ssh），所以无条件先跑。
+  stamp "机械重放开始"
   $PY "$AGENT" run "$@"
   rc=$?
-  echo "agent.py run exit=${rc}"
+  stamp "机械重放结束 exit=${rc}"
 
   if [ ! -s "$REPORT" ]; then
     echo "L3：连报告都没生成"
@@ -63,9 +69,10 @@ print(report.severity(paths.load_state()))
     $PY "$AGENT" notify --message "有 ${WORST}，但代理不通没做分析：${REPORT}"
   else
     PROMPT="按照 ${SKILL} 的步骤处理今天这一轮。输入是 ${AGENT_DIR}/state/last-run.json 和各仓库的 playbook（${AGENT_DIR}/state/playbook/<仓库名>/）。先用 agent.py resolve 逐个解冲突（顺序：每个仓库先 tracker 再 daily 再 release），解不动的走 stop 交人工；然后 agent.py render 刷新报告事实部分；最后把判断和待人工事项写进 ${REPORT} 的「分析与建议」一节。不要 push，不要动用户的主 checkout。"
+    stamp "claude 解冲突开始（看门狗 ${WATCHDOG}s）"
     run_claude "$WATCHDOG" "$PROMPT"
     crc=$?
-    echo "claude exit=${crc}"
+    stamp "claude 解冲突结束 exit=${crc}"
     # claude 被看门狗 kill 时可能正停在某个冲突中间，worktree 会挂着一棵半成品树，
     # 不清掉的话第二天 resolve start 一上来就失败。abort 是幂等的，没会话时也安全。
     if [ "$crc" -ne 0 ]; then
@@ -77,7 +84,9 @@ print(report.severity(paths.load_state()))
     # 不可逆的一步由脚本调，不交给 claude 自己：解冲突的和决定推不推的不该是同一个。
     # 放在 render 之前，报告里「推送」那一行才是最终结果而不是机械阶段的拒绝理由。
     if [ "$crc" -eq 0 ]; then
+      stamp "推送开始"
       $PY "$AGENT" push 2>&1 || true
+      stamp "推送结束"
     fi
 
     $PY "$AGENT" render >/dev/null 2>&1 || true

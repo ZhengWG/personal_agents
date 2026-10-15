@@ -62,7 +62,12 @@ run_claude() {
     ( sleep "$secs" && kill -9 "$cp" 2>/dev/null ) &
     local wd=$!
     wait "$cp"; rc=$?
-    kill "$wd" 2>/dev/null    # 杀子 shell 本身；孤儿 sleep 自己会退，不会再 kill
+    # 取消看门狗要先杀 sleep、再杀子 shell。只 kill "$wd" 的话 sleep 会被
+    # init 收养（PPID=1）继续跑满 secs 秒 —— claude 秒级失败时就留下一个
+    # sleep 3600 挂在系统上。顺序反过来不行：子 shell 先死，sleep 就没父进程
+    # 可查了。sleep 被杀后 `&&` 短路，那条 kill -9 也不会执行。
+    pkill -P "$wd" 2>/dev/null
+    kill "$wd" 2>/dev/null
     cat "$out"
     [ "$rc" -eq 0 ] && break
     if [ "$attempt" -eq 1 ] && grep -qiE "$CLAUDE_RETRYABLE" "$out"; then
