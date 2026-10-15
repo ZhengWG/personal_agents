@@ -24,7 +24,10 @@ PY=/usr/bin/python3
 SKILL=".claude/skills/vllm-rebase.md"
 # 解冲突比单纯写分析慢得多（omni 一轮可能 8 个冲突，每个都要去上游 grep 复核），
 # 1800 秒不够用，实测会在半路被看门狗 kill 掉，留下一棵解了一半的树。
-WATCHDOG=3600
+# 3600 也在变紧：2026-10-15 实测用掉 2444 秒，而两天前只要约 1600 秒 —— delta
+# 规模在涨（omni 的 daily/release 现在各是 35 步重放）。被 kill 掉的代价是整轮
+# 白跑（crc=137 → L2 降级，一个任务都不推），所以宁可把余量留足。
+WATCHDOG=5400
 
 TODAY=$(date +%Y-%m-%d)
 REPORT="$AGENT_DIR/reports/${TODAY}.md"

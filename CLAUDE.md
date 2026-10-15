@@ -14,7 +14,15 @@
     `scripts/` 里只放跨 agent 共享的三样：`_env.sh` / `send_mail.py` / `install-schedule.sh`。
 
 - `/vllm-rebase` — 每天 07:40 在隔离 worktree 里演练 `vllm-ant` / `vllm-omni-ant` 的 Ant delta
-  rebase，提前暴露冲突 / 掉 patch / delta 漂移。**只读，不推送**。
+  rebase，提前暴露冲突 / 掉 patch / delta 漂移。
+  - **会推送，但分两档**（2026-10-15 起 `push_enabled: true`）：`daily` / `release` 解完冲突
+    且验收通过就自动 `--force-with-lease` 推（演练分支，每天覆盖，解错了明天重来）；
+    `tracker` 的解冲突产物**永不自动推**（`after_resolve: false`）—— 它的解法会沉进
+    `public_tracker` 历史、成为往后每轮 rebase 的 delta 来源，错一次天天带着，只能人工
+    cherry-pick。唯一例外是机械 merge 本来就干净那几天，走 `maybe_push` 推 `public_tracker`。
+  - **推送五道闸**：全局开关 → 任务 `after_resolve` → 会话是本轮的（按 `started` 比时间戳，
+    否则会把上一轮的候选树推上去）→ 无交人工、无 🔴 低自信 → 六项验收全过。
+    失败模式是"不推"而不是"推错"；真的 git push 失败会在通知标题上出现 `· 推送失败`。
   - **两种模式**：`agent.py run` 是 radar（遇冲突 skip 继续，一轮看全冲突面）；
     `agent.py resolve` 是逐个解（停下等 Claude 解完再走，产出完整候选分支）。
     每天两遍都跑 —— delta 对齐只有在 rebase 真正跑完时才有意义。
