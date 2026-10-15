@@ -9,6 +9,7 @@
 后续 patch 可能出现连带冲突 —— 报告里明确标了 cascaded，别当成独立问题。
 """
 import os
+import re
 
 from . import gitutil as g
 from . import release_audit
@@ -91,6 +92,24 @@ def _drive_merge(wt, onto):
     return found
 
 
+_FROM_IMPORT = re.compile(r"^([+-])\s*from\s+[\w.]+\s+import\s+(.+)$")
+
+
+def _canon_for_align(line):
+    """diff-of-diffs 比较前的规范化：`from <模块> import <符号>` 只留符号。
+
+    release 任务重放到 RC tag 上，而 delta 来源跟着社区 main。上游在两者之间
+    搬过模块时，同一条 import 必然在两边写成不同路径 —— 候选树只能用 RC 当时
+    的路径，否则根本 import 不到。这不是丢 patch，不该判成 delta 不对齐。
+    2026-10-15 vllm-ant 的 RC 从 v0.31 跳到 v0.32 就撞上了：
+        source: +from vllm.renderers.chat_utils.chat_template import _load_chat_template
+        result: +from vllm.entrypoints.chat_utils import _load_chat_template
+    符号名照样逐字比，所以改了「导入什么」仍然会被抓住，只放过「从哪导入」。
+    """
+    m = _FROM_IMPORT.match(line)
+    return "%s<from-import> %s" % (m.group(1), m.group(2).strip()) if m else line
+
+
 def _alignment(wt, upstream, source, onto, head, pathspec=None):
     """diff-of-diffs：Ant delta 在新 base 上必须和在 main 上是同一份。
 
@@ -110,8 +129,12 @@ def _alignment(wt, upstream, source, onto, head, pathspec=None):
     except GitError as exc:
         return {"checked": False, "error": str(exc)[:500]}
 
-    only_left = [ln for ln in left if ln not in set(right)]
-    only_right = [ln for ln in right if ln not in set(left)]
+    # 比的是规范化形式，报出来的仍是原始行 —— 否则报告里看到的东西和文件里的对不上
+    left_canon = [_canon_for_align(ln) for ln in left]
+    right_canon = [_canon_for_align(ln) for ln in right]
+    left_set, right_set = set(left_canon), set(right_canon)
+    only_left = [ln for ln, c in zip(left, left_canon) if c not in right_set]
+    only_right = [ln for ln, c in zip(right, right_canon) if c not in left_set]
     return {
         "checked": True,
         "aligned": not only_left and not only_right,
