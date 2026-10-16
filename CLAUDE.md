@@ -33,6 +33,15 @@
     并写明依据。冲突标记残留、空 commit、没报备的 untracked 都会被工具拒绝。
   - **绝不碰主 checkout**：所有动作在 `~/.cache/vllm-rebase-agent/<仓库名>/` 的
     detached worktree 里；分析步骤的 Claude 也不许改仓库，只能改报告的分析段。
+  - **claude 阶段耗时涨了别急着精简 playbook**：2026-10-13 到 10-16 从约 1600 秒涨到
+    3196 秒，而解法数一直是 1/5/2/1/6 没变 —— 涨的不是解冲突，是会话之外的复核。
+    实测分布：会话内解冲突只占 39%，其余 61% 是读 playbook + 逐条去上游查 sha /
+    比行号 / 跑 `--is-ancestor`（note 里留痕可查），这是 playbook 自己要求的"必须复核"。
+    查过一轮 30 条解法的引用情况：**playbook 几乎每条都在用**，连 v0.23.0 的冲突 1/2/3
+    都还在引用，删哪条都会让对应解法从 `basis=playbook` 掉回 `new`，更容易被标低自信。
+    `daily` 和 `release` 看着在重复复核，但两者 base 不同（main vs RC tag），同一条结论
+    在两边可能不成立（`#8751` 就是 main 有 rc1 没有），砍掉会解错。
+    结论：这是尽职的代价不是浪费，该调的是 `WATCHDOG`，不是 playbook。
   - 六个反直觉的坑（rebase 交换 ours/theirs、source 落后 main 时对齐检查无意义、
     py3.9 对 vLLM 的语法误报、内网远端不能抓 tag、tag 排序、一次跑到底）
     都写在 [vllm-rebase-agent/README.md](./vllm-rebase-agent/README.md)，**改代码前先看**。
