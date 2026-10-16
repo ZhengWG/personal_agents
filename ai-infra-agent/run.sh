@@ -37,7 +37,11 @@ if [ -n "$SINCE" ]; then
 else
   REPORT="$AGENT_DIR/reports/${TODAY}.md"
   PROMPT="按照 .claude/skills/daily-ai-infra.md 中的步骤，抓取今天 (${TODAY}) 的 AI infra 推理动态，生成日报保存到 ${REPORT}，然后调用 scripts/send_mail.py 发邮件。最后输出预计阅读时间、各分类条数和邮件发送结果。"
-  WATCHDOG=1800
+  # 2026-10-16 实测整轮 26 分 44 秒（claude 阶段约 1560 秒），1800 的余量只剩 4 分钟。
+  # 被 kill 的代价是走降级：L2 补发半成品、或 L3 退回原始条目报告 —— 日报质量直接掉档，
+  # 所以宁可把余量留足。抓取只占前 3 分钟（09:00:04 起、09:03 就落了 fetch json），
+  # 涨的是 claude 的归类和价值化总结。
+  WATCHDOG=2700
 fi
 
 # --- 工具函数 ---
