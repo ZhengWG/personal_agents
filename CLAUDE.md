@@ -57,7 +57,7 @@
     到删 pod **全程占卡**（拉模型、装环境时也占），只在 `pod run --gpu` 那条命令跑时放掉。
   - **集群细节不进仓库**（本仓库是公开的）：镜像 / 节点 / NAS / namespace / pod 模板在
     `~/.config/vllm-omni-issue-agent/`。
-  - 六个坑（kubectl 要剥代理变量、exec 不能带 `--request-timeout`、占卡进程要走 login shell…）
+  - 七个坑（kubectl 要剥代理变量、exec 不能带 `--request-timeout`、timeline 不能带 token…）
     写在 [vllm-omni-issue-agent/README.md](./vllm-omni-issue-agent/README.md)，**改代码前先看**。
 
 ## 环境说明

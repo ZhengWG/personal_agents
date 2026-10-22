@@ -27,16 +27,18 @@ API = "https://api.github.com"
 STALE_CLAIM_DAYS = 14
 
 # 宁可误判成"有人在做"（少一个候选），也别漏判（跟别人撞车）。
+# 撇号要认弯引号 ’：很多人的输入法 / 编辑器会把 I'd 打成 I’d，只认 ' 的话
+# "I’d like to investigate this, can you assign this issue to me?" 这种明确认领会漏掉（#8614）。
 CLAIM_RE = re.compile(r"""(?ix)
-    \b(i'?ll|i\s+will|i'?d\s+like\s+to|i\s+can|i\s+could|let\s+me|i'?m\s+going\s+to
+    \b(i['’]?ll|i\s+will|i['’]?d\s+like\s+to|i\s+can|i\s+could|let\s+me|i['’]?m\s+going\s+to
        |i\s+am\s+going\s+to|i\s+want\s+to)\s+
       (take|work\s+on|fix|look\s+into|handle|pick\s+(it\s+|this\s+)?up|submit|open|send
-       |raise|create|investigate)\b
-  | \b(can|could|may)\s+i\s+(take|work\s+on|pick|fix|try)\b
+       |raise|create|investigate|help)\b
+  | \b(can|could|may)\s+i\s+(take|work\s+on|pick|fix|try|help)\b
   | \bworking\s+on\s+(this|it|a\s+fix|the\s+fix)\b
-  | \bassign\s+(this\s+|it\s+)?to\s+me\b
+  | \bassign\s+(this\s+|it\s+|the\s+)?(issue\s+)?to\s+me\b
   | (^|\s)/assign\b
-  | \bi'?m\s+on\s+it\b
+  | \bi['’]?m\s+on\s+it\b
   | \bpr\s+(is\s+)?(coming|incoming|on\s+the\s+way|soon)\b
   | 我来 | 认领 | 我(来)?(修|处理|跟进|提\s*pr|提个\s*pr) | 我这边(修|处理|跟进|提)
 """)
@@ -47,9 +49,9 @@ HW_RE = re.compile(r"(?i)\b(B200|B300|GB200|GB300|Blackwell|NPU|Ascend|910B\d?|X
                    r"|ROCm|AMD|MI\d{3}X?|MUSA|Moore\s*Threads|Apple\s+Silicon|MPS|Jetson)\b")
 
 
-def _headers():
+def _headers(auth=True):
     h = {"Accept": "application/vnd.github+json"}
-    tok = os.environ.get("GITHUB_TOKEN")
+    tok = os.environ.get("GITHUB_TOKEN") if auth else None
     if tok:
         h["Authorization"] = "Bearer %s" % tok
     return h
@@ -68,10 +70,14 @@ def issue(upstream, number):
 
 
 def timeline(upstream, number, max_pages=3):
+    """故意不带 token：fine-grained token 没有 pull_requests 读权限（读别人的公开仓库也给不了），
+    GitHub 会把"被某个 PR 提到"的 cross-referenced 事件静默过滤掉 —— 认领判断全靠它。
+    实测 #8503 带 token 10 条、匿名 17 条，open 的 PR 全没了，有人在修的 issue 被当成未认领。
+    代价是 timeline 吃未认证每小时 60 次的额度，超了会被标成未核查，不会读到残缺数据。"""
     events = []
     for page in range(1, max_pages + 1):
         url = "%s/repos/%s/issues/%s/timeline?per_page=100&page=%d" % (API, upstream, number, page)
-        batch = http.get_json(url, _headers(), label="timeline #%s" % number)
+        batch = http.get_json(url, _headers(auth=False), label="timeline #%s" % number)
         events.extend(batch)
         if len(batch) < 100:
             break

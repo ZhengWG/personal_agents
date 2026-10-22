@@ -114,7 +114,7 @@ pod 走借卡模式（card-num 0）：调度器不知道我们用哪几张卡，
 3. `pod run --gpu` 跑 GPU 命令前放掉，命令一结束马上占回来（先占回再报告结束，下一条命令不会和它抢）。
 4. run.sh 收尾删 pod（看门狗 kill、Ctrl-C 也会走 trap）；`--keep-pod` 时只放卡不删。
 
-## 六个反直觉的坑（改代码前先看）
+## 七个反直觉的坑（改代码前先看）
 
 1. **kubectl 不能带代理变量**。`_env.sh` 设了 `HTTPS_PROXY`（claude 要），而 apiserver 在
    一个不在 `NO_PROXY` 里的内网域名下 —— 带着就绕去本地 Clash。`pod._kube_env()` 一律剥掉。
@@ -129,6 +129,10 @@ pod 走借卡模式（card-num 0）：调度器不知道我们用哪几张卡，
 6. **同步代码不用先提交**。`pod sync` 用临时 index 给 worktree 当前内容（含没提交的改动和新文件）
    拍快照 commit，打 bundle 传进 pod 里的 clone。`pod run` 默认先同步一次 —— 改完忘了同步，
    就会拿旧代码测出错误结论。
+
+7. **timeline 不能带 token**。fine-grained token 读别人的公开仓库时没有 pull_requests 权限，
+   timeline 会静默丢掉 PR 的 cross-referenced 事件（#8503：带 token 10 条、匿名 17 条）——
+   有人在修的 issue 全被当成未认领。`gh.timeline()` 一律匿名请求；搜索、issue 正文照常带 token。
 
 ## 安全边界
 
