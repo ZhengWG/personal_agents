@@ -1,0 +1,26 @@
+{
+  "_comment": "vllm-omni-issue-agent 的唯一配置。本仓库是公开的：镜像 / 节点 / NAS / namespace 这些集群细节不写这里，写 ~/.config/vllm-omni-issue-agent/pod.json（见 README）。",
+
+  "upstream": "vllm-project/vllm-omni",
+  "repo": "~/Projects/workspaces/vllm-omni-ant",
+  "community_remote": "origin",
+  "base": "origin/main",
+  "worktree_root": "~/.cache/vllm-omni-issue-agent",
+  "branch_prefix": "issue-fix/",
+
+  "_scan_note": "两条查询按 number 去重。-linked:pr 只认用 closing 关键字关联的 PR，口头认领和只提了 #号 的 PR 靠逐个读 timeline 判断，所以 timeline 的检查数有上限（未认证 API 每小时 60 次）。",
+  "scan": {
+    "lookback_days": 21,
+    "queries": [
+      "is:issue is:open no:assignee -linked:pr label:bug",
+      "is:issue is:open no:assignee -linked:pr in:title [Bug]"
+    ],
+    "max_candidates": 40,
+    "max_timeline_checks": 30
+  },
+
+  "_max_cards_note": "fix 模式单次最多占几张卡，pod up 超过就拒绝。",
+  "max_cards": 4,
+
+  "local_config_dir": "~/.config/vllm-omni-issue-agent"
+}
