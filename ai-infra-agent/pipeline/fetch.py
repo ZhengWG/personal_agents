@@ -84,6 +84,10 @@ ARXIV_KEYWORDS = re.compile(
 
 ATOM = "{http://www.w3.org/2005/Atom}"
 REPO_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
+# github.com/<these>/... are site paths, not repos (PR-body image links are
+# github.com/user-attachments/assets/<uuid> — got auto-promoted 2026-10-07)
+NON_REPO_OWNERS = {"user-attachments", "orgs", "users", "settings", "sponsors",
+                   "marketplace", "topics", "features", "apps", "notifications"}
 # infra-relevance gate for org-watch auto-tracking (drops awesome-lists, OCR, apps)
 INFRA_KW = re.compile(
     r"infer|serv|kernel|gemm|attention|\bmla\b|\bmoe\b|expert|parallel|pipeline|"
@@ -261,7 +265,8 @@ def tally_and_promote(cfg: dict, blob: str, tracked_names: set, today: str,
     for m in REPO_RE.findall(blob or ""):
         name = m[:-4] if m.endswith(".git") else m
         short = name.split("/")[-1].lower()
-        if name in tracked_names or short in ignore or name.count("/") != 1:
+        if (name in tracked_names or short in ignore or name.count("/") != 1
+                or name.split("/")[0].lower() in NON_REPO_OWNERS):
             continue
         counts[name] = counts.get(name, 0) + 1
     promoted = []
