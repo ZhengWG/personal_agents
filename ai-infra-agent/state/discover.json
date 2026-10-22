@@ -22,6 +22,7 @@
         "FasterDecoding/TEAL",
         "FujitsuResearch/OneCompression",
         "HanGuo97/flute",
+        "HectorHHZ/Less-is-MoE",
         "Hsword/SpotServe",
         "IAAR-Shanghai/ICSFSurvey",
         "INT-FlashAttention2024/INT-FlashAttention",
@@ -37,6 +38,9 @@
         "LLMServe/DistServe",
         "LMCache/LMCache",
         "Lizonghang/prima.cpp",
+        "MCG-NJU/OneStreamer",
+        "MCG-NJU/VideoChat3",
+        "MCG-NJU/VideoJev",
         "MiniMax-AI/MiniMax-01",
         "ModelTC/lightllm",
         "NVIDIA/FasterTransformer",
@@ -67,6 +71,7 @@
         "abdelfattah-lab/nitro",
         "alichherawalla/off-grid-mobile",
         "alinlab/HOMER",
+        "athrael-soju/Narwhal",
         "autoliuweijie/FastBERT",
         "berlino/gated_linear_attention",
         "bigscience-workshop/petals",
@@ -75,6 +80,7 @@
         "bytedance/ShadowKV",
         "castorini/berxit",
         "comeusr/diversed",
+        "corbenicai/galahad",
         "d-matrix-ai/keyformer-llm",
         "deepglint/RWKV-CLIP",
         "deepseek-ai/3FS",
@@ -142,6 +148,7 @@
         "pytorch-labs/attention-gym",
         "raymin0223/fast_robust_early_exit",
         "samirasadov28-code/storyroute",
+        "sbryngelson/ANEForge",
         "sgl-project/sglang",
         "shadowpa0327/Palu",
         "sii-research/siiRL",
@@ -172,8 +179,8 @@
         "xlite-dev/ffpa-attn",
         "zaydzuhri/pythia-mlkv"
       ],
-      "updated": "2026-08-08"
+      "updated": "2026-10-22"
     }
   },
-  "last_run": "2026-08-08"
+  "last_run": "2026-10-22"
 }
