@@ -61,6 +61,21 @@ def push_failures(run):
     return out
 
 
+def mirror_failures(run):
+    """OSS 镜像同步真失败的仓库 —— 按配置忽略的（上游还没发布的 wheel）不算。
+
+    和 push_failures 一样要单独报：severity() 只看 task status，同步失败不会
+    改变它。而这正是 2026-10-19 那次事故的根因之一 —— 镜像缺包只在内网 CI 里
+    报错，本地这边一声不响，挂了三天才被发现。
+    """
+    out = []
+    for repo in run.get("repos", []):
+        m = repo.get("oss_mirror") or {}
+        if m and not m.get("done"):
+            out.append("%s(%s)" % (repo.get("name"), m.get("reason", "")[:40]))
+    return out
+
+
 def summary_line(run):
     bits = []
     for repo in run.get("repos", []):
@@ -75,6 +90,9 @@ def summary_line(run):
     failed = push_failures(run)
     if failed:
         line += " ‖ 推送失败 %d 个：%s" % (len(failed), "、".join(failed))
+    mir = mirror_failures(run)
+    if mir:
+        line += " ‖ OSS 镜像同步失败：%s" % "、".join(mir)
     return line
 
 

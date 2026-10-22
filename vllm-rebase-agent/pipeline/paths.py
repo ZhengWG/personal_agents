@@ -23,6 +23,7 @@ _INHERITED = (
     "rc_tag_pattern",
     "playbook_ref",
     "playbook_files",
+    "oss_mirror",
     "tasks",
 )
 

@@ -192,6 +192,46 @@ def cmd_push(args):
     return 0
 
 
+def cmd_mirror(args):
+    """把 daily 分支钉定的 cmake 依赖同步到内网 OSS —— run.sh 在推送后调。
+
+    必须跟在推送后面：daily 一旦更新，它钉的依赖版本就可能变，而内网构建只从
+    OSS 取包。这步此前一直是手工的，结果 2026-10-19 到 10-22 流水线挂了三天，
+    报的就是「OSS 镜像缺少 cmake 依赖」。只有配了 oss_mirror 的仓库会做。
+    """
+    cfg = paths.load_config()
+    run = paths.load_state()
+    todo = [r for r in cfg["repos"] if r.get("oss_mirror")
+            and (not args.repo or r["name"] in args.repo)]
+    if not todo:
+        print("没有仓库配了 oss_mirror，跳过")
+        return 0
+
+    failed = 0
+    for repo_cfg in todo:
+        if args.dry_run:
+            spec = repo_cfg["oss_mirror"]
+            print("[dry-run] %s → %s (%s)" % (repo_cfg["name"], spec["ref"], spec["oss_prefix"]))
+            continue
+        res = tasks.mirror_oss_deps(repo_cfg)
+        for entry in run.get("repos", []):
+            if entry.get("name") == repo_cfg["name"]:
+                entry["oss_mirror"] = res
+                break
+        if res["done"]:
+            up = res.get("uploaded") or []
+            print("[已同步] %s (%s) —— %s" % (
+                repo_cfg["name"], res.get("ref"),
+                "传了 %d 个：%s" % (len(up), "、".join(up)) if up else "本来就齐"))
+        else:
+            failed += 1
+            print("[同步失败] %s —— %s" % (repo_cfg["name"], res.get("reason")))
+
+    if not args.dry_run and run:
+        paths.save_state(run)
+    return 1 if failed else 0
+
+
 def cmd_notify(args):
     run = paths.load_state()
     if not run:
@@ -209,6 +249,9 @@ def cmd_notify(args):
     # 否则开了 push_enabled 之后推不上去是无声的。
     if report.push_failures(run):
         title += " · 推送失败"
+    # 镜像缺包只会在内网 CI 里炸，本地不报的话没人知道（2026-10-19 挂了三天）
+    if report.mirror_failures(run):
+        title += " · OSS 镜像缺包"
     body = args.message or report.summary_line(run)
     if args.quiet_when_clean and worst == "clean":
         print("clean，按 --quiet-when-clean 不打扰")
@@ -309,6 +352,11 @@ def main():
     push.add_argument("--task", action="append", help="只推指定任务（可重复）")
     push.add_argument("--dry-run", action="store_true", help="只列出推/不推和原因")
     push.set_defaults(func=cmd_push)
+
+    mir = sub.add_parser("mirror", help="同步 daily 钉定的 cmake 依赖到内网 OSS")
+    mir.add_argument("--repo", action="append", help="只同步指定仓库（可重复）")
+    mir.add_argument("--dry-run", action="store_true", help="只打印要同步什么")
+    mir.set_defaults(func=cmd_mirror)
 
     status = sub.add_parser("status", help="看配置和上一轮结果")
     status.set_defaults(func=cmd_status)

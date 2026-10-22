@@ -10,6 +10,11 @@
 """
 import os
 import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
 
 from . import gitutil as g
 from . import release_audit
@@ -387,6 +392,73 @@ def push_resolved(repo_cfg, task, sess, ctx, push_enabled):
         "after_resolve": True,
         "reason": "ok" if rc == 0 else text[-800:],
     }
+
+
+def mirror_oss_deps(repo_cfg):
+    """把某个 ref 钉定的 cmake 依赖同步到内网 OSS。
+
+    为什么必须跟在推送后面：daily 分支跟着社区 main 走，cmake 里钉的依赖版本
+    天天变（2026-10-19→10-22 三天里 DeepGEMM 换了两次），而内网构建只认 OSS 上
+    的包。缺一个，CI 就以「OSS 镜像缺少 cmake 依赖」整条挂掉 —— 这步此前一直靠
+    手工补，结果流水线挂了三天没人发现。
+
+    用 git archive 把 cmake 导出到临时目录，而不是让脚本自己 --vllm-ref clone：
+    那会把整个 vllm 仓重新 clone 一遍，而我们只要几个 cmake 文件。
+    """
+    spec = repo_cfg.get("oss_mirror") or {}
+    if not spec:
+        return {"done": False, "reason": "该仓库没有配 oss_mirror（不走 OSS 构建）"}
+
+    repo = repo_cfg["repo"]
+    script = os.path.join(repo, spec["script"])
+    if not os.path.isfile(script):
+        return {"done": False, "reason": "找不到同步脚本 %s" % spec["script"]}
+
+    ref = "%s/%s" % (repo_cfg["ant_remote"], spec["ref"])
+    tmp = tempfile.mkdtemp(prefix="oss-mirror-")
+    try:
+        # 走 shell 管道而不是 g.git：archive 的输出是二进制 tar，g.git 按文本读会坏掉
+        rc = subprocess.call("git -C %s archive %s CMakeLists.txt cmake/ pyproject.toml | tar -x -C %s"
+                             % (shlex.quote(repo), shlex.quote(ref), shlex.quote(tmp)), shell=True)
+        if rc != 0:
+            return {"done": False, "ref": spec["ref"], "reason": "导出 cmake 失败（tar rc=%d）" % rc}
+
+        proc = subprocess.run(
+            [sys.executable, script, "sync", "--vllm-src", tmp, "--oss-prefix", spec["oss_prefix"]],
+            cwd=repo, capture_output=True, text=True, timeout=3600, check=False)
+        out = (proc.stdout or "") + (proc.stderr or "")
+        uploaded = [l.split("/")[-1] for l in out.splitlines() if l.strip().startswith("\u2191")]
+        # sync 跑完再 dry-run 复核：脚本对下载不到的东西（比如上游还没发布的 torch
+        # wheel）会静默跳过并照样打 "sync complete"，不复核就看不出来。
+        chk = subprocess.run(
+            [sys.executable, script, "sync", "--vllm-src", tmp,
+             "--oss-prefix", spec["oss_prefix"], "--dry-run"],
+            cwd=repo, capture_output=True, text=True, timeout=600, check=False)
+        still = [l.split()[1] for l in (chk.stdout or "").splitlines()
+                 if l.startswith("[MISS]") and len(l.split()) > 1]
+        # 不是每个 MISS 都该拦：CI 只检查 cmake 的 *_SRC_DIR 依赖，而 torch 这种
+        # pip wheel 走别的路径。上游把 torch 钉到还没发布的版本时（2026-10-22 的
+        # 2.14.0+cu129 在 download.pytorch.org 上是 403），镜像不了也不该天天报
+        # 失败 —— 那会把真正缺包的那天淹掉。照样列出来，只是不算阻断。
+        ignorable = set(spec.get("ignore_missing") or [])
+        blocking = [d for d in still if d not in ignorable]
+        ok = proc.returncode == 0 and not blocking
+        if ok:
+            reason = "ok" if not still else "已齐（%s 上游暂无，按配置忽略）" % "、".join(still)
+        elif blocking:
+            reason = "同步后仍缺：%s" % "、".join(blocking)
+        else:
+            reason = out[-500:]
+        return {
+            "done": ok,
+            "ref": spec["ref"],
+            "uploaded": uploaded,
+            "still_missing": still,
+            "blocking": blocking,
+            "reason": reason,
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def extract_playbook(repo_cfg, dest):

@@ -51,6 +51,14 @@
     {
       "name": "vllm-ant",
       "repo": "/Users/zheng/Projects/workspaces/vllm-ant",
+      "_oss_mirror_note": "推完 daily 必须同步：那个分支跟着上游 main 走，cmake 钉定的依赖版本天天变（DeepGEMM 三天里就换了两次），而内网构建只从 OSS 取包。不同步 CI 就报「OSS 镜像缺少 cmake 依赖」—— 2026-10-19 到 10-22 挂了三天就是因为这步一直是手工的。omni 没有 cmake 构建，不需要这一项。",
+      "oss_mirror": {
+        "script": "tools/mirror_cmake_deps.py",
+        "ref": "public_tracker_daily",
+        "oss_prefix": "oss://antsys-balance-prod/vllm-omni/pkgs/cmake-deps",
+        "_ignore_missing_note": "CI 只检查 cmake 的 *_SRC_DIR 依赖；torch 是 pip wheel 走别的路径，上游钉到还没发布的版本时（如 2026-10-22 的 2.14.0+cu129）镜像不了，不该天天报失败把真缺包那天淹掉。",
+        "ignore_missing": ["torch"]
+      },
       "playbook_files": [
         ".claude/skills/ant-release-rebase/SKILL.md"
       ]

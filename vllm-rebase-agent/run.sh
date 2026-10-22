@@ -90,6 +90,13 @@ print(report.severity(paths.load_state()))
       stamp "推送开始"
       $PY "$AGENT" push 2>&1 || true
       stamp "推送结束"
+
+      # 推完必须同步 OSS 镜像：daily 一更新，它钉的 cmake 依赖版本就可能变，
+      # 而内网构建只从 OSS 取包，缺一个 CI 就整条挂。2026-10-19 到 10-22 挂了
+      # 三天没人发现，就是因为这步一直靠手工补。失败不阻断本轮（报告里有记录）。
+      stamp "OSS 镜像同步开始"
+      $PY "$AGENT" mirror 2>&1 || true
+      stamp "OSS 镜像同步结束"
     fi
 
     $PY "$AGENT" render >/dev/null 2>&1 || true
