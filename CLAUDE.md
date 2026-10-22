@@ -46,6 +46,20 @@
     py3.9 对 vLLM 的语法误报、内网远端不能抓 tag、tag 排序、一次跑到底）
     都写在 [vllm-rebase-agent/README.md](./vllm-rebase-agent/README.md)，**改代码前先看**。
 
+- `/vllm-omni-issue` — 每天 15:00 扫 `vllm-project/vllm-omni` 近 21 天新开的 bug，按 timeline
+  判断有没有人认领，Claude 分诊（值不值得修、H20 上能否复现、几张卡、什么模型）。
+  - **每日只分诊**：不起 pod、不改代码。修复要人手动 `run.sh --fix <号> [--cards K]`
+    （2026-10-22 用户选的：每天只出候选清单，挑中再修）。
+  - **只到本地分支**：`issue-fix/<号>-<slug>`，worktree 在 `~/.cache/vllm-omni-issue-agent/`。
+    不推送、不在 GitHub 上评论 / 认领 / 开 PR —— 上游 AI Usage Policy 要求 PR 作者本人回答
+    intent gate、披露 AI 使用。这条和用户全局的"不写 AI 署名"有冲突，修复报告里提醒人自己定。
+  - **GPU pod 照 gpu-debug-pod skill 起**（借卡模式，card-num 0），单次最多 4 卡。从 `pod up`
+    到删 pod **全程占卡**（拉模型、装环境时也占），只在 `pod run --gpu` 那条命令跑时放掉。
+  - **集群细节不进仓库**（本仓库是公开的）：镜像 / 节点 / NAS / namespace / pod 模板在
+    `~/.config/vllm-omni-issue-agent/`。
+  - 六个坑（kubectl 要剥代理变量、exec 不能带 `--request-timeout`、占卡进程要走 login shell…）
+    写在 [vllm-omni-issue-agent/README.md](./vllm-omni-issue-agent/README.md)，**改代码前先看**。
+
 ## 环境说明
 
 - **所有环境设置集中在 `scripts/_env.sh`**，被各 agent 的 `run.sh` source。改 PATH/代理/证书只改这一处。

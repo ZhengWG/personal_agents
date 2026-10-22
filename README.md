@@ -7,6 +7,7 @@
 | Agent | 触发 | 功能 | 详情 |
 |-------|------|------|------|
 | [daily-ai-infra](./ai-infra-agent/) | 每天 09:00 | 核心盘（23 个推理仓 PR/Release + arXiv + 博客 + HN/Reddit）+ 拓源（Trending / awesome 增量 / 新术语），SMTP 发邮件 | [部署文档](./ai-infra-agent/README.md) |
+| [vllm-omni-issue](./vllm-omni-issue-agent/) | 每天 15:00 + 手动 `--fix` | 扫 vllm-omni 社区新开的 bug，按 timeline 判断有没有人认领，Claude 分诊（值不值得修 / 在 H20 上能不能复现 / 要几张卡）；手动 `--fix <号>` 时拉本地分支、起 GPU pod 占卡、复现、修、写回归测试（不推送、不开 PR）；落报告 + macOS 通知 | [部署文档](./vllm-omni-issue-agent/README.md) |
 | [vllm-rebase](./vllm-rebase-agent/) | 每天 07:40 | 在隔离 worktree 里把 `vllm-ant` / `vllm-omni-ant` 的 Ant delta 演练 rebase 到最新社区 main 和最新 release tag，提前暴露冲突、掉 patch、delta 漂移，并按 playbook 自动解冲突产出本地候选分支（不推送）；落报告 + macOS 通知 | [部署文档](./vllm-rebase-agent/README.md) |
 
 每个 agent 的部署、配置、排障请看自己的 README。本文件只讲**整个仓库共享的底座**。
@@ -51,6 +52,14 @@ personal_agents/
 │   ├── _env.sh               #   PATH / 代理 / proxy_ok / run_claude
 │   ├── send_mail.py          #   通用 SMTP 发信
 │   └── install-schedule.sh   #   通用 launchd 安装器
+│
+├── vllm-omni-issue-agent/    # 社区 issue 分诊 + 手动修复（本地分支，不推送）
+│   ├── run.sh                #   唯一入口：分诊 / --fix <号>
+│   ├── agent.py              #   唯一 CLI：scan/issue/triage/render/notify/fix/pod
+│   ├── pipeline/             #   gh / scan / triage / report / fix / pod / pod_helper / paths
+│   ├── config/agent.json     #   上游仓库 + 扫描条件 + 卡数上限（集群细节在 ~/.config）
+│   ├── state/                #   candidates.json / triage.json / fix.json / pod.json
+│   └── reports/              #   YYYY-MM-DD.md + fix-<号>.md
 │
 ├── vllm-rebase-agent/        # 每日 rebase 演练（只读，不推送）
 │   ├── run.sh                #   唯一入口
@@ -148,6 +157,10 @@ ls -t logs/daily-ai-infra-*.log | head -1 | xargs less  # 看最近日志
 vllm-rebase-agent/run.sh                                # 每日 rebase 演练（~8 分钟）
 python3 vllm-rebase-agent/agent.py status               # 看配置 + 上一轮结果
 scripts/install-schedule.sh vllm-rebase-agent --status  # 看它的调度状态
+
+vllm-omni-issue-agent/run.sh                            # 每日分诊（不起 pod）
+vllm-omni-issue-agent/run.sh --fix 9242 --cards 2       # 手动修一个（本地分支，跑完删 pod）
+python3 vllm-omni-issue-agent/agent.py status           # 上一轮分诊 / 当前修复会话 / pod
 scripts/install-schedule.sh ai-infra-agent --uninstall  # 暂停调度
 ```
 
