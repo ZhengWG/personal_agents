@@ -115,15 +115,44 @@
       "repo": "deepseek-ai/DualPipe",
       "prs": true,
       "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepJIT",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepSelect",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepGEMM-Ascend",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepEP-Ascend",
+      "prs": true,
+      "releases": true
+    },
+    {
+      "repo": "Niko1221/Strata",
+      "prs": false,
+      "releases": true
+    },
+    {
+      "repo": "deepseek-ai/DeepInfer",
+      "prs": true,
+      "releases": true
     }
   ],
   "candidates": {
-    "user-attachments/assets": {
-      "mentions_total": 1,
-      "runs_seen": 1,
+    "ggml-org/l": {
+      "mentions_total": 4,
+      "runs_seen": 2,
       "source": "mention",
-      "last_seen": "2026-07-04",
-      "curated": true
+      "last_seen": "2026-10-16"
     }
   },
   "ignore": [
