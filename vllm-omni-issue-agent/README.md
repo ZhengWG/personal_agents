@@ -47,8 +47,8 @@ cd ~/.cache/vllm-omni-issue-agent/issue-9242        # 接着改
 
 下游 fork / 别的项目的 PR 提到它不算认领。正文里作者自己说要提 PR 的，扫描不查，交给 Claude 读全文时判断。
 未认证的 GitHub API 每小时 60 次，timeline 每轮最多读 30 个；扫描顺手把每个 issue 的全文和评论落到
-`state/issues/<号>.md`，分诊直接读，不再逐个调 API。想放开限制就放一个只读 token：
-`echo GITHUB_TOKEN=... > ~/.config/vllm-omni-issue-agent/github.env && chmod 600 $_`（run.sh 会读）。
+`state/issues/<号>.md`，分诊直接读，不再逐个调 API。想放开限制就放一个只读 token 到
+`~/.config/personal-agents/github.env`（所有 agent 共用，由 `scripts/_env.sh` 加载，坏 token 会自动弃用）。
 
 ## 首次配置（集群细节只在本机）
 

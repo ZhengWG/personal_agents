@@ -118,6 +118,7 @@ run_claude 1200 "按 .claude/skills/<agent>.md 执行..."   # 带看门狗调 cl
 | 交互式 shell 里没有代理变量，直连 API 会 403 | 显式 export（这里是唯一来源） |
 | `timeout` 是 Homebrew coreutils，干净 PATH 里没有 | `run_claude` 自带 `sleep + kill` 看门狗 |
 | `source ~/.zshrc` 在非交互 shell 会中途中断 | 完全不 source，自包含 |
+| 未认证 GitHub API 每小时只有 60 次 | 加载 `~/.config/personal-agents/github.env` 的只读 token；先试一次，过期或被组织拒绝（vllm-project 不收有效期超过 366 天的 token）就弃用，退回未认证 |
 
 ### 网络不稳怎么办
 

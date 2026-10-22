@@ -19,9 +19,6 @@ set -uo pipefail
 
 source "${0:A:h:h}/scripts/_env.sh"      # 共享底座：PATH / 代理 / proxy_ok / run_claude；同时设好 $REPO
 cd "$REPO" || exit 1
-# 可选：放一个只读的 GITHUB_TOKEN 就不受未认证每小时 60 次的限制
-GH_ENV="$HOME/.config/vllm-omni-issue-agent/github.env"
-[ -f "$GH_ENV" ] && { set -a; source "$GH_ENV"; set +a; }
 
 AGENT_DIR="${0:A:h}"
 AGENT="$AGENT_DIR/agent.py"

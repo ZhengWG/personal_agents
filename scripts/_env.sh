@@ -39,6 +39,23 @@ export NO_PROXY="localhost,127.0.0.1,*.alipay.com,*.antfin.com,*.alibaba-inc.com
 CORP_CA="/Library/Application Support/starpoint/CertManager/certificate.crt"
 [ -f "$CORP_CA" ] && export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-$CORP_CA}"
 
+# --- GitHub token（可选，所有 agent 共用）---
+# 有了它 API 额度从每小时 60 次变成 5000 次。只放不勾任何权限的 fine-grained token。
+# 用之前先试一次：坏 token 比没有还糟 —— 每个请求都 401/403，而未认证至少能读公开仓库。
+# 实际撞上过：vllm-project 和 sgl-project（LMSYS）都拒绝有效期超过 366 天的 fine-grained token，
+# 而 token 一年内必然过期，过期那天不能让三个 agent 一起挂。
+GITHUB_ENV_FILE="$HOME/.config/personal-agents/github.env"
+if [ -f "$GITHUB_ENV_FILE" ]; then
+  set -a; source "$GITHUB_ENV_FILE"; set +a
+  _gh_code=$(curl -sS -m 15 -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${GITHUB_TOKEN:-}" https://api.github.com/repos/vllm-project/vllm 2>/dev/null)
+  if [ "$_gh_code" != "200" ]; then
+    echo "[_env] GITHUB_TOKEN 不可用（HTTP ${_gh_code:-?}：过期，或有效期超过 366 天被组织拒绝），本轮按未认证跑" >&2
+    unset GITHUB_TOKEN
+  fi
+  unset _gh_code
+fi
+
 # --- 代理预检 ---
 # 返回 0 = 通。调用方自己决定失败时怎么告警（发邮件 / 弹通知 / 直接退出）。
 proxy_ok() { nc -z -G3 127.0.0.1 "$PROXY_PORT" 2>/dev/null; }

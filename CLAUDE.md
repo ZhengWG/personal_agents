@@ -63,7 +63,10 @@
 ## 环境说明
 
 - **所有环境设置集中在 `scripts/_env.sh`**，被各 agent 的 `run.sh` source。改 PATH/代理/证书只改这一处。
-  它同时提供 `proxy_ok`（代理预检）和 `run_claude <秒> <prompt>`（带看门狗调 claude）。
+  它同时提供 `proxy_ok`（代理预检）和 `run_claude <秒> <prompt>`（带看门狗调 claude），
+  并加载共用的 `GITHUB_TOKEN`（`~/.config/personal-agents/github.env`，**先试后用**：
+  vllm-project / sgl-project 拒绝有效期超过 366 天的 fine-grained token，过期也会 401，
+  不通就 unset 退回未认证 —— 坏 token 比没有还糟）。
 - **不要 `source ~/.zshrc`** 取环境：交互式 zshrc 在非交互 shell 下会中途中断，
   导致代理没设上、claude 直连 API 触发 403。
 - **launchd/cron 的 PATH 只有 `/bin:/usr/bin:/usr/ucb:/usr/local/bin`**，不含 `/opt/homebrew/bin`。
