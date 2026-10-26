@@ -23,6 +23,18 @@ for _d in /opt/homebrew/bin /usr/local/bin; do
 done
 unset _d
 
+# --- ossutil（vllm-rebase 的 OSS 镜像同步要用）---
+# 它装在 /usr/local/bin，而 launchd 给的 PATH 实测只有
+#   /usr/bin:/bin:/usr/sbin:/sbin
+# —— 没有 /usr/local/bin。上面那段 node 探测是「有 node 才加该目录」，node 在
+# homebrew，所以 /usr/local/bin 一直没被加进来。少这一段，agent.py mirror 每轮
+# 都以 FileNotFoundError: 'ossutil' 失败：2026-10-23 起连续三轮一个包都没传成，
+# 而 CI 那边只报「OSS 镜像缺包」，两边对不上，拖到 10-26 才查出来。
+for _d in /usr/local/bin /opt/homebrew/bin; do
+  [ -x "$_d/ossutil" ] && export PATH="$_d:$PATH" && break
+done
+unset _d
+
 # --- 代理 ---
 # 本区域直连 claude API 会 403，必须走本地 Clash。交互式 shell 里并没有设这些变量，
 # 所以这里是唯一来源，不是"补一份"。

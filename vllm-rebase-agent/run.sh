@@ -41,8 +41,30 @@ notify() { /usr/bin/osascript -e "display notification \"$2\" with title \"$1\""
 _T0=$(date +%s)
 stamp() { printf '[%s +%ds] %s\n' "$(date +%H:%M:%S)" "$(( $(date +%s) - _T0 ))" "$*"; }
 
+# 开跑前验一遍要用的命令都在。照 ai-infra 的 proxy_ok 那个模式：宁可一秒内
+# 失败并告警，也不要跑完 40 分钟、推送完了才在最后一步炸。
+# 这一道是 2026-10-26 补的：ossutil 装在 /usr/local/bin，而 launchd 的 PATH 没有
+# 它，于是 OSS 同步从 10-23 起连续三轮失败，一个包都没传成。跑到最后一步才报错，
+# 加上错误信息被截断，拖了三天才查出来。
+preflight() {
+  local missing=() c
+  for c in git ossutil claude; do
+    command -v "$c" >/dev/null 2>&1 || missing+=("$c")
+  done
+  [ ${#missing[@]} -eq 0 ] && return 0
+  echo "PATH=$PATH"
+  echo "缺少命令：${missing[*]}"
+  return 1
+}
+
 {
   echo "=== vllm-rebase START $(date -Iseconds) args=$* ==="
+
+  if ! preflight; then
+    notify "vLLM 每日 rebase 💥 环境不全" "缺命令，没开跑 —— 看 ${LOG_FILE}"
+    echo "=== vllm-rebase END (preflight failed) $(date -Iseconds) ==="
+    exit 1
+  fi
 
   # 机械部分不需要 claude、也不需要代理（git 走 ssh），所以无条件先跑。
   stamp "机械重放开始"

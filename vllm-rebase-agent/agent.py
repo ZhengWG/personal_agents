@@ -227,9 +227,35 @@ def cmd_mirror(args):
             failed += 1
             print("[同步失败] %s —— %s" % (repo_cfg["name"], res.get("reason")))
 
-    if not args.dry_run and run:
-        paths.save_state(run)
+    if not args.dry_run:
+        # 连续失败要能看出来。10-23 到 10-26 失败了三轮，每轮的提示长得一模一样，
+        # 没有任何"这事已经烂了三天"的信号，这是它拖那么久的原因之一。
+        streak = _load_streak()
+        if failed:
+            streak["count"] = streak.get("count", 0) + 1
+            streak.setdefault("since", datetime.datetime.now().isoformat(timespec="seconds"))
+        else:
+            streak = {"count": 0}
+        _save_streak(streak)
+        if streak["count"] > 1:
+            print("⚠️ OSS 同步已连续失败 %d 轮（自 %s）" % (streak["count"], streak.get("since", "?")))
+        if run:
+            paths.save_state(run)
     return 1 if failed else 0
+
+
+def _load_streak():
+    try:
+        with open(paths.MIRROR_STREAK_FILE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_streak(data):
+    os.makedirs(paths.STATE_DIR, exist_ok=True)
+    with open(paths.MIRROR_STREAK_FILE, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
 
 
 def cmd_notify(args):

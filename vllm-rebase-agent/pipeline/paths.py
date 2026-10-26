@@ -14,6 +14,9 @@ STATE_DIR = os.path.join(AGENT_DIR, "state")
 REPORT_DIR = os.path.join(AGENT_DIR, "reports")
 STATE_FILE = os.path.join(STATE_DIR, "last-run.json")
 PLAYBOOK_DIR = os.path.join(STATE_DIR, "playbook")
+# OSS 同步连续失败了几轮。单独存是因为 last-run.json 每轮都被 run 覆盖，
+# 跨轮的计数放那里会丢 —— 而"连续失败"恰恰是最需要跨轮才能看出来的信号。
+MIRROR_STREAK_FILE = os.path.join(STATE_DIR, "mirror-streak.json")
 
 _INHERITED = (
     "community_remote",

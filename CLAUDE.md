@@ -57,7 +57,8 @@
     到删 pod **全程占卡**（拉模型、装环境时也占），只在 `pod run --gpu` 那条命令跑时放掉。
   - **集群细节不进仓库**（本仓库是公开的）：镜像 / 节点 / NAS / namespace / pod 模板在
     `~/.config/vllm-omni-issue-agent/`。
-  - 七个坑（kubectl 要剥代理变量、exec 不能带 `--request-timeout`、timeline 不能带 token…）
+  - 八个坑（kubectl 要剥代理变量、exec 不能带 `--request-timeout`、timeline 不能带 token、
+    同步代码不能依赖 pod 连 GitHub…）
     写在 [vllm-omni-issue-agent/README.md](./vllm-omni-issue-agent/README.md)，**改代码前先看**。
 
 ## 环境说明
@@ -69,8 +70,13 @@
   不通就 unset 退回未认证 —— 坏 token 比没有还糟）。
 - **不要 `source ~/.zshrc`** 取环境：交互式 zshrc 在非交互 shell 下会中途中断，
   导致代理没设上、claude 直连 API 触发 403。
-- **launchd/cron 的 PATH 只有 `/bin:/usr/bin:/usr/ucb:/usr/local/bin`**，不含 `/opt/homebrew/bin`。
-  node 必须显式加进 PATH（`_env.sh` 已按 nvm → Homebrew 顺序探测）。
+- **launchd 给的 PATH 实测只有 `/usr/bin:/bin:/usr/sbin:/sbin`** —— 既不含
+  `/opt/homebrew/bin`，**也不含 `/usr/local/bin`**（这里早先记的是「含 /usr/local/bin」，
+  不准，2026-10-26 实测纠正）。所以 `_env.sh` 里每个要用的命令都得按存在与否显式探测：
+  node 在 Homebrew、ossutil 在 `/usr/local/bin`，少一个就是 command not found。
+  **新增依赖外部命令的功能时，务必用 `env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin"`
+  模拟 launchd 验一遍**，别只在自己的交互 shell 里跑通就算完 —— OSS 同步就是这么
+  连续失败三轮没人发现的（手工验证时 PATH 完整，launchd 下 ossutil 根本找不到）。
 - Node.js 本机是 **Homebrew** 装的（`/opt/homebrew/bin/node`），不是 nvm。`~/.nvm` 不存在。
 - `claude` 是原生 Mach-O 二进制（`~/.local/bin/claude`），**不依赖 node**。
 - 别用 `timeout` 命令：那是 Homebrew coreutils 的，干净 PATH 里没有。用 `run_claude`。

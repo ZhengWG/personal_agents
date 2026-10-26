@@ -394,6 +394,23 @@ def push_resolved(repo_cfg, task, sess, ctx, push_enabled):
     }
 
 
+def _key_error_line(out):
+    """从一坨输出里挑出最像根因的那一行。
+
+    盲目 out[-500:] 会把最有用的行切在中间：2026-10-26 那次报告里显示的是
+    "ess:"，而真正的 FileNotFoundError: 'ossutil' 被埋在后面，看了也不知道
+    发生了什么。优先找异常行，退而取最后一个非空行。
+    """
+    lines = [l.strip() for l in (out or "").splitlines() if l.strip()]
+    if not lines:
+        return "（无输出）"
+    for l in reversed(lines):
+        if ("Error" in l or "error:" in l or l.startswith("ERROR")
+                or "Exception" in l or "Traceback" in l):
+            return l[:300]
+    return lines[-1][:300]
+
+
 def mirror_oss_deps(repo_cfg):
     """把某个 ref 钉定的 cmake 依赖同步到内网 OSS。
 
@@ -434,6 +451,15 @@ def mirror_oss_deps(repo_cfg):
             [sys.executable, script, "sync", "--vllm-src", tmp,
              "--oss-prefix", spec["oss_prefix"], "--dry-run"],
             cwd=repo, capture_output=True, text=True, timeout=600, check=False)
+        # 复核本身也要 ossutil 查 OSS。它崩掉时输出里自然没有 [MISS] 行，
+        # 不能据此判定"没缺" —— 2026-10-26 就是这样把 ossutil 缺失报成了
+        # still_missing: []（看起来一切正常）。所以先确认复核真的跑成了。
+        chk_ok = chk.returncode == 0 and "[ok ]" in (chk.stdout or "")
+        if not chk_ok:
+            return {"done": False, "ref": spec["ref"], "uploaded": uploaded,
+                    "still_missing": None, "blocking": None,
+                    "reason": "同步后无法复核（%s）" % _key_error_line(
+                        (chk.stdout or "") + (chk.stderr or ""))}
         still = [l.split()[1] for l in (chk.stdout or "").splitlines()
                  if l.startswith("[MISS]") and len(l.split()) > 1]
         # 不是每个 MISS 都该拦：CI 只检查 cmake 的 *_SRC_DIR 依赖，而 torch 这种
@@ -448,7 +474,7 @@ def mirror_oss_deps(repo_cfg):
         elif blocking:
             reason = "同步后仍缺：%s" % "、".join(blocking)
         else:
-            reason = out[-500:]
+            reason = _key_error_line(out)
         return {
             "done": ok,
             "ref": spec["ref"],
