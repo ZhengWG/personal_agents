@@ -51,10 +51,11 @@
     {
       "name": "vllm-ant",
       "repo": "/Users/zheng/Projects/workspaces/vllm-ant",
-      "_oss_mirror_note": "推完 daily 必须同步：那个分支跟着上游 main 走，cmake 钉定的依赖版本天天变（DeepGEMM 三天里就换了两次），而内网构建只从 OSS 取包。不同步 CI 就报「OSS 镜像缺少 cmake 依赖」—— 2026-10-19 到 10-22 挂了三天就是因为这步一直是手工的。omni 没有 cmake 构建，不需要这一项。",
+      "_oss_mirror_note": "推完必须同步：这些分支的 cmake 钉定的依赖版本会变（DeepGEMM 一周换了三次），而内网构建只从 OSS 取包。不同步 CI 就报「OSS 镜像缺少 cmake 依赖」。omni 没有 cmake 构建，不需要这一项。",
+      "_oss_mirror_refs_note": "daily 和 release 必须都同步，而且它们钉的版本不一样：daily 的 base 是社区 main，release 的 base 是 RC tag，上游在 tag 之后升过依赖时两边就分叉（2026-10-26 实测 daily 钉 08200307、release 钉 a7a92773）。早先只配了 daily，于是 release 的那个包一直没传、CI 一直挂，还被误判成「CI 缓存了旧 manifest」。release 的 ref 名含 RC 号，每出一个新 RC 就是一个新分支，所以这里按模式匹配而不是写死。",
       "oss_mirror": {
         "script": "tools/mirror_cmake_deps.py",
-        "ref": "public_tracker_daily",
+        "refs": ["public_tracker_daily", "ant/releases/*-daily"],
         "oss_prefix": "oss://antsys-balance-prod/vllm-omni/pkgs/cmake-deps",
         "_ignore_missing_note": "CI 只检查 cmake 的 *_SRC_DIR 依赖；torch 是 pip wheel 走别的路径，上游钉到还没发布的版本时（如 2026-10-22 的 2.14.0+cu129）镜像不了，不该天天报失败把真缺包那天淹掉。",
         "ignore_missing": ["torch"]

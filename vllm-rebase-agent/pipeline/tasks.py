@@ -431,14 +431,56 @@ def mirror_oss_deps(repo_cfg):
     if not os.path.isfile(script):
         return {"done": False, "reason": "找不到同步脚本 %s" % spec["script"]}
 
-    ref = "%s/%s" % (repo_cfg["ant_remote"], spec["ref"])
+    refs = _expand_mirror_refs(repo_cfg, spec)
+    if not refs:
+        return {"done": False, "reason": "配的 refs 一个都没匹配到远端分支：%s"
+                                         % "、".join(spec.get("refs") or [])}
+    results = [_mirror_one_ref(repo_cfg, spec, script, r) for r in refs]
+    uploaded = [u for r in results for u in (r.get("uploaded") or [])]
+    bad = [r for r in results if not r["done"]]
+    return {
+        "done": not bad,
+        "refs": refs,
+        "uploaded": uploaded,
+        "per_ref": results,
+        "reason": "ok" if not bad else "；".join(
+            "%s：%s" % (r["ref"], r["reason"]) for r in bad),
+    }
+
+
+def _expand_mirror_refs(repo_cfg, spec):
+    """把配置里的 ref 模式展开成真实存在的远端分支。
+
+    release 的分支名含 RC 号（ant/releases/v0.32.1rc0-daily），每出一个新 RC
+    就是一个新分支，写死没法维护，所以配的是通配。只取远端真有的，漏掉的
+    在上层报出来而不是静默跳过。
+    """
+    remote = repo_cfg["ant_remote"]
+    patterns = spec.get("refs") or ([spec["ref"]] if spec.get("ref") else [])
+    out = []
+    for pat in patterns:
+        rc, text = g.git(["for-each-ref", "--format=%(refname:short)",
+                          "refs/remotes/%s/%s" % (remote, pat)],
+                         repo_cfg["repo"], check=False)
+        if rc != 0:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if line and line not in out:
+                out.append(line)
+    return out
+
+
+def _mirror_one_ref(repo_cfg, spec, script, ref):
+    """同步单个 ref 钉定的依赖。ref 是 remote-tracking 的全名。"""
+    repo = repo_cfg["repo"]
     tmp = tempfile.mkdtemp(prefix="oss-mirror-")
     try:
         # 走 shell 管道而不是 g.git：archive 的输出是二进制 tar，g.git 按文本读会坏掉
         rc = subprocess.call("git -C %s archive %s CMakeLists.txt cmake/ pyproject.toml | tar -x -C %s"
                              % (shlex.quote(repo), shlex.quote(ref), shlex.quote(tmp)), shell=True)
         if rc != 0:
-            return {"done": False, "ref": spec["ref"], "reason": "导出 cmake 失败（tar rc=%d）" % rc}
+            return {"done": False, "ref": ref, "reason": "导出 cmake 失败（tar rc=%d）" % rc}
 
         proc = subprocess.run(
             [sys.executable, script, "sync", "--vllm-src", tmp, "--oss-prefix", spec["oss_prefix"]],
@@ -456,7 +498,7 @@ def mirror_oss_deps(repo_cfg):
         # still_missing: []（看起来一切正常）。所以先确认复核真的跑成了。
         chk_ok = chk.returncode == 0 and "[ok ]" in (chk.stdout or "")
         if not chk_ok:
-            return {"done": False, "ref": spec["ref"], "uploaded": uploaded,
+            return {"done": False, "ref": ref, "uploaded": uploaded,
                     "still_missing": None, "blocking": None,
                     "reason": "同步后无法复核（%s）" % _key_error_line(
                         (chk.stdout or "") + (chk.stderr or ""))}
@@ -477,7 +519,7 @@ def mirror_oss_deps(repo_cfg):
             reason = _key_error_line(out)
         return {
             "done": ok,
-            "ref": spec["ref"],
+            "ref": ref,
             "uploaded": uploaded,
             "still_missing": still,
             "blocking": blocking,

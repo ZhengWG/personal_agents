@@ -211,21 +211,31 @@ def cmd_mirror(args):
     for repo_cfg in todo:
         if args.dry_run:
             spec = repo_cfg["oss_mirror"]
-            print("[dry-run] %s → %s (%s)" % (repo_cfg["name"], spec["ref"], spec["oss_prefix"]))
+            refs = tasks._expand_mirror_refs(repo_cfg, spec)
+            print("[dry-run] %s → %s" % (repo_cfg["name"], spec["oss_prefix"]))
+            for r in refs:
+                print("    %s" % r)
+            if not refs:
+                print("    ⚠️ 配的 refs 没匹配到任何远端分支：%s"
+                      % "、".join(spec.get("refs") or []))
             continue
         res = tasks.mirror_oss_deps(repo_cfg)
         for entry in run.get("repos", []):
             if entry.get("name") == repo_cfg["name"]:
                 entry["oss_mirror"] = res
                 break
+        refs = res.get("refs") or ([res.get("ref")] if res.get("ref") else [])
         if res["done"]:
             up = res.get("uploaded") or []
-            print("[已同步] %s (%s) —— %s" % (
-                repo_cfg["name"], res.get("ref"),
+            print("[已同步] %s（%d 个分支：%s）—— %s" % (
+                repo_cfg["name"], len(refs), "、".join(refs),
                 "传了 %d 个：%s" % (len(up), "、".join(up)) if up else "本来就齐"))
         else:
             failed += 1
             print("[同步失败] %s —— %s" % (repo_cfg["name"], res.get("reason")))
+        for one in res.get("per_ref") or []:
+            if not one["done"]:
+                print("    ✗ %s：%s" % (one["ref"], one["reason"]))
 
     if not args.dry_run:
         # 连续失败要能看出来。10-23 到 10-26 失败了三轮，每轮的提示长得一模一样，
