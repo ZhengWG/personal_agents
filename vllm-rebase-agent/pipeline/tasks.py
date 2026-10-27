@@ -448,6 +448,60 @@ def mirror_oss_deps(repo_cfg):
     }
 
 
+def prune_daily_refs(repo_cfg, keep, dry_run=True):
+    """删掉过气的 -daily 演练分支，只留最近 keep 个。
+
+    每出一个新 RC 就多一个 ant/releases/<rc>-daily，而旧的那些对应的 RC 早已
+    过气：留着除了占位没用，OSS 同步每轮还要遍历它们（RC 攒到几十个会明显拖慢）。
+
+    两道安全线，因为这是不可逆的远端删除：
+      1. 只认 ant/releases/*-daily 这个形状，不带 -daily 的正式 release 分支
+         （ant/releases/vX.Y.Z）永远不碰；
+      2. 按版本号排序后保留最近 keep 个，keep<1 时直接不干活。
+    """
+    if keep is None or keep < 1:
+        return {"done": True, "pruned": [], "kept": [], "reason": "keep<1，不清理"}
+
+    remote = repo_cfg["ant_remote"]
+    rc, text = g.git(["for-each-ref", "--sort=-v:refname",
+                      "--format=%(refname:short)",
+                      "refs/remotes/%s/ant/releases/*-daily" % remote],
+                     repo_cfg["repo"], check=False)
+    if rc != 0:
+        return {"done": False, "pruned": [], "reason": "列分支失败：%s" % text[-200:]}
+
+    prefix = "%s/" % remote
+    branches = []
+    for line in text.splitlines():
+        line = line.strip()
+        # 二次确认形状：for-each-ref 的 pattern 已经限定了，但删远端分支这种事
+        # 多校验一遍不亏 —— 名字里没有 -daily 的一律跳过。
+        if line.startswith(prefix) and line.endswith("-daily"):
+            branches.append(line[len(prefix):])
+
+    # 正式版（tag 名里没有 rcN）的演练分支一律留着：它对应社区的正式 release，
+    # 是最可能被固化成 ant/releases/vX.Y.Z 的那一个，远比 RC 的演练有价值。
+    # 而且不能靠排序来保住它 —— git 的 -v:refname 把 v0.32.0 排在 v0.32.0rc1
+    # 之后（当成更小），纯按顺序砍会先砍掉正式版那个。
+    rc_re = re.compile(r"rc\d+-daily$")
+    finals = [b for b in branches if not rc_re.search(b)]
+    rcs = [b for b in branches if rc_re.search(b)]
+    kept, stale = finals + rcs[:keep], rcs[keep:]
+    if not stale:
+        return {"done": True, "pruned": [], "kept": kept, "reason": "没有过气分支"}
+    if dry_run:
+        return {"done": True, "pruned": [], "kept": kept, "would_prune": stale,
+                "reason": "dry-run"}
+
+    pruned, failed = [], []
+    for br in stale:
+        rc, out = g.git(["push", remote, "--delete", br], repo_cfg["repo"],
+                        check=False, timeout=600)
+        (pruned if rc == 0 else failed).append(br if rc == 0 else "%s(%s)" % (br, out[-120:]))
+    return {"done": not failed, "pruned": pruned, "kept": kept,
+            "reason": "ok" if not failed else "删除失败：%s" % "、".join(failed)}
+
+
 def _expand_mirror_refs(repo_cfg, spec):
     """把配置里的 ref 模式展开成真实存在的远端分支。
 

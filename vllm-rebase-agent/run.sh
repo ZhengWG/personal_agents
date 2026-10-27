@@ -119,6 +119,10 @@ print(report.severity(paths.load_state()))
       stamp "OSS 镜像同步开始"
       $PY "$AGENT" mirror 2>&1 || true
       stamp "OSS 镜像同步结束"
+
+      # 清掉过气的 -daily 演练分支。每个 RC 一个，攒着除了占位没用，同步每轮
+      # 还要遍历它们。只动带 -daily 的，正式版那个（无 rcN）也留着。
+      $PY "$AGENT" prune --apply 2>&1 || true
     fi
 
     $PY "$AGENT" render >/dev/null 2>&1 || true

@@ -268,6 +268,42 @@ def _save_streak(data):
         json.dump(data, fh, ensure_ascii=False, indent=2)
 
 
+def cmd_prune(args):
+    """删掉过气的 -daily 演练分支 —— run.sh 在同步之后调。
+
+    默认 dry-run：远端删分支不可逆，要真删得显式 --apply。
+    """
+    cfg = paths.load_config()
+    todo = [r for r in cfg["repos"] if (r.get("oss_mirror") or {}).get("keep_daily_refs")
+            and (not args.repo or r["name"] in args.repo)]
+    if not todo:
+        print("没有仓库配了 keep_daily_refs，跳过")
+        return 0
+
+    failed = 0
+    for repo_cfg in todo:
+        keep = repo_cfg["oss_mirror"]["keep_daily_refs"]
+        res = tasks.prune_daily_refs(repo_cfg, keep, dry_run=not args.apply)
+        if not res["done"]:
+            failed += 1
+            print("[清理失败] %s —— %s" % (repo_cfg["name"], res.get("reason")))
+            continue
+        would = res.get("would_prune") or []
+        if would:
+            print("[dry-run] %s 会删 %d 个（保留最近 %d 个：%s）：" % (
+                repo_cfg["name"], len(would), keep, "、".join(res["kept"])))
+            for b in would:
+                print("    - %s" % b)
+            print("  真删加 --apply")
+        elif res.get("pruned"):
+            print("[已清理] %s 删了 %d 个：%s（保留：%s）" % (
+                repo_cfg["name"], len(res["pruned"]), "、".join(res["pruned"]),
+                "、".join(res["kept"])))
+        else:
+            print("[无需清理] %s —— %s" % (repo_cfg["name"], res.get("reason")))
+    return 1 if failed else 0
+
+
 def cmd_notify(args):
     run = paths.load_state()
     if not run:
@@ -393,6 +429,11 @@ def main():
     mir.add_argument("--repo", action="append", help="只同步指定仓库（可重复）")
     mir.add_argument("--dry-run", action="store_true", help="只打印要同步什么")
     mir.set_defaults(func=cmd_mirror)
+
+    pr = sub.add_parser("prune", help="删掉过气的 -daily 演练分支（默认 dry-run）")
+    pr.add_argument("--repo", action="append", help="只清理指定仓库（可重复）")
+    pr.add_argument("--apply", action="store_true", help="真的删（不加只打印）")
+    pr.set_defaults(func=cmd_prune)
 
     status = sub.add_parser("status", help="看配置和上一轮结果")
     status.set_defaults(func=cmd_status)
