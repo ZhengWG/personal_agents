@@ -274,7 +274,7 @@ def cmd_prune(args):
     默认 dry-run：远端删分支不可逆，要真删得显式 --apply。
     """
     cfg = paths.load_config()
-    todo = [r for r in cfg["repos"] if (r.get("oss_mirror") or {}).get("keep_daily_refs")
+    todo = [r for r in cfg["repos"] if r.get("keep_daily_refs")
             and (not args.repo or r["name"] in args.repo)]
     if not todo:
         print("没有仓库配了 keep_daily_refs，跳过")
@@ -282,7 +282,7 @@ def cmd_prune(args):
 
     failed = 0
     for repo_cfg in todo:
-        keep = repo_cfg["oss_mirror"]["keep_daily_refs"]
+        keep = repo_cfg["keep_daily_refs"]
         res = tasks.prune_daily_refs(repo_cfg, keep, dry_run=not args.apply)
         if not res["done"]:
             failed += 1

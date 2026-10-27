@@ -27,6 +27,7 @@ _INHERITED = (
     "playbook_ref",
     "playbook_files",
     "oss_mirror",
+    "keep_daily_refs",
     "tasks",
 )
 

@@ -9,8 +9,10 @@
 
   "notify": { "macos": true },
 
+  "_keep_daily_refs_note": "每出一个新 RC 就多一个 ant/releases/<rc>-daily，旧的留着除了占位没用（OSS 同步还要遍历）。只保留最近这么多个，更老的在推送后删掉。只删带 -daily 的演练分支，不带后缀的正式 release 分支（ant/releases/vX.Y.Z）永不触碰；正式版的演练分支也无视计数保留。设成 0 就不清理。放在 defaults 而不是 oss_mirror 里：清理和「走不走 OSS 构建」是两件独立的事，当初塞进 oss_mirror 导致 omni 没有 cmake 构建、于是永远清不到。",
   "_defaults_note": "每个 repo 没写的字段从这里继承。",
   "defaults": {
+    "keep_daily_refs": 2,
     "community_remote": "origin",
     "ant_remote": "ant",
     "community_main": "origin/main",
@@ -57,8 +59,6 @@
         "script": "tools/mirror_cmake_deps.py",
         "refs": ["public_tracker_daily", "ant/releases/*-daily"],
         "oss_prefix": "oss://antsys-balance-prod/vllm-omni/pkgs/cmake-deps",
-        "_keep_daily_refs_note": "每出一个新 RC 就多一个 ant/releases/<rc>-daily，旧的留着除了占位没用，OSS 同步每轮还要遍历。只保留最近这么多个，更老的在推送后删掉。只删带 -daily 的演练分支，不带后缀的正式 release 分支（ant/releases/vX.Y.Z）永远不碰。设成 0 就不清理。",
-        "keep_daily_refs": 2,
         "_ignore_missing_note": "CI 只检查 cmake 的 *_SRC_DIR 依赖；torch 是 pip wheel 走别的路径，上游钉到还没发布的版本时（如 2026-10-22 的 2.14.0+cu129）镜像不了，不该天天报失败把真缺包那天淹掉。",
         "ignore_missing": ["torch"]
       },
