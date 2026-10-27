@@ -4,6 +4,7 @@
 **分析**（Claude 按 ant-release-rebase skill 追加到末尾的占位区）。
 分开的理由：事实部分必须每天都在，判断部分允许缺失。
 """
+import re
 
 STATUS_ICON = {
     "clean": "✅",
@@ -42,6 +43,36 @@ def severity(run):
             if order.index(task["status"]) > order.index(worst):
                 worst = task["status"]
     return worst
+
+
+def promotable(run):
+    """社区已出正式版、且当天 release 产物够格固化的仓库。
+
+    判断「什么时候可以打正式 release」这件事能自动化，但「要不要打」不能：
+    正式分支 ant/releases/vX.Y.Z 是 non-force 的对外发布，推出去就在那儿了，
+    而要不要跟着社区发版有一半是产品决定。所以这里只负责把判断结果和现成命令
+    摆出来，推送留给人 —— 和 tracker 的 after_resolve=false 是同一个道理。
+    """
+    out = []
+    for repo in run.get("repos", []):
+        rc = repo.get("latest_rc") or ""
+        # 带 rcN 后缀的是预发布，社区自己都还没定版，不提示
+        if not rc or re.search(r"rc\d+$", rc):
+            continue
+        for task in repo.get("tasks", []):
+            if task.get("name") != "release":
+                continue
+            sess = (task.get("resolve") or {})
+            push = task.get("push") or {}
+            # 够格 = 本轮验收过、没有低自信、而且确实推出去了 -daily
+            if task.get("verified") and push.get("done"):
+                out.append({
+                    "repo": repo.get("name"),
+                    "tag": rc,
+                    "head": push.get("head") or task.get("head"),
+                    "daily_ref": push.get("ref"),
+                })
+    return out
 
 
 def push_failures(run):
@@ -93,6 +124,10 @@ def summary_line(run):
     mir = mirror_failures(run)
     if mir:
         line += " ‖ OSS 镜像同步失败：%s" % "、".join(mir)
+    prom = promotable(run)
+    if prom:
+        line += " ‖ 可固化正式 release：%s" % "、".join(
+            "%s→%s" % (x["repo"], x["tag"]) for x in prom)
     return line
 
 
@@ -366,6 +401,22 @@ def render(run):
             _task_block(out, repo, task)
 
     _resolve_section(out, run.get("resolve") or {})
+
+    prom = promotable(run)
+    if prom:
+        out.append("## 可固化为正式 release")
+        out.append("")
+        out.append("社区已发布正式版，且本轮 release 产物验收通过、已推演练分支。"
+                   "固化是对外发布，所以不自动做 —— 确认后执行：")
+        out.append("")
+        for x in prom:
+            out.append("```bash")
+            out.append("# %s：社区 %s 已正式发布" % (x["repo"], x["tag"]))
+            out.append("cd <%s 的 checkout>" % x["repo"])
+            out.append("git push ant %s:refs/heads/ant/releases/%s" % (
+                x["head"] or x["daily_ref"], x["tag"].lstrip("v") and x["tag"]))
+            out.append("```")
+        out.append("")
 
     out.append("## 分析与建议")
     out.append("")

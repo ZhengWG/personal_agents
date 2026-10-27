@@ -324,6 +324,8 @@ def cmd_notify(args):
     # 镜像缺包只会在内网 CI 里炸，本地不报的话没人知道（2026-10-19 挂了三天）
     if report.mirror_failures(run):
         title += " · OSS 镜像缺包"
+    if report.promotable(run):
+        title += " · 可发正式版"
     body = args.message or report.summary_line(run)
     if args.quiet_when_clean and worst == "clean":
         print("clean，按 --quiet-when-clean 不打扰")
