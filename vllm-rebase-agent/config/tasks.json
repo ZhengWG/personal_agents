@@ -53,7 +53,7 @@
     {
       "name": "vllm-ant",
       "repo": "/Users/zheng/Projects/workspaces/vllm-ant",
-      "_oss_mirror_note": "推完必须同步：这些分支的 cmake 钉定的依赖版本会变（DeepGEMM 一周换了三次），而内网构建只从 OSS 取包。不同步 CI 就报「OSS 镜像缺少 cmake 依赖」。omni 没有 cmake 构建，不需要这一项。",
+      "_oss_mirror_note": "推送前先同步候选 SHA 的 cmake 依赖并核对钩子，失败就不推；push 会立即触发 CI，推完才上传会有缺包窗口。独立 mirror 命令复核所有配置分支。omni 没有 cmake 构建，不需要这一项。",
       "_oss_mirror_refs_note": "daily 和 release 必须都同步，而且它们钉的版本不一样：daily 的 base 是社区 main，release 的 base 是 RC tag，上游在 tag 之后升过依赖时两边就分叉（2026-10-26 实测 daily 钉 08200307、release 钉 a7a92773）。早先只配了 daily，于是 release 的那个包一直没传、CI 一直挂，还被误判成「CI 缓存了旧 manifest」。release 的 ref 名含 RC 号，每出一个新 RC 就是一个新分支，所以这里按模式匹配而不是写死。",
       "oss_mirror": {
         "script": "tools/mirror_cmake_deps.py",

@@ -81,6 +81,11 @@ python3 $A resolve finish                                  # 体检 + 落候选�
 产物：`reports/<date>.md`（报告）、`state/last-run.json`（结构化结果）、
 `logs/vllm-rebase-*.log`（运行日志）。
 
+配置了 `oss_mirror` 的仓库在推送前同步候选 SHA 的依赖，并用该 SHA 自带的
+解析器核对 manifest 与 CMake 钩子；缺包或解析失败就不推，避免 CI 先于上传启动。
+独立 `agent.py mirror` 用已抓取的 `delta_source` 解析器检查所有配置分支，不依赖
+主 checkout 是否 pull；结果中的 `script_sha` 可用于核对实际脚本版本。
+
 ## 装 / 改 / 停定时
 
 ```bash

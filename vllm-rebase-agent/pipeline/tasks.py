@@ -301,7 +301,14 @@ def maybe_push(entry, task, repo_cfg, ctx, wt, push_enabled):
             args.append("--force-with-lease=refs/heads/%s:%s" % (ref, g.rev(tracking, wt)))
         else:
             args.append("--force-with-lease")
-    args.append("HEAD:refs/heads/%s" % ref)
+    head = g.rev("HEAD", wt)
+    args.append("%s:refs/heads/%s" % (head, ref))
+    if repo_cfg.get("oss_mirror"):
+        mirror = mirror_oss_deps(repo_cfg, refs=[head], script_ref=head)
+        if not mirror["done"]:
+            entry["push"] = {"done": False,
+                             "reason": "推送前 OSS 同步失败：%s" % mirror["reason"]}
+            return
     rc, text = g.git(args, wt, check=False, timeout=1800)
     entry["push"] = {
         "done": rc == 0,
@@ -384,6 +391,11 @@ def push_resolved(repo_cfg, task, sess, ctx, push_enabled):
             args.append("--force-with-lease")
     args.append("%s:refs/heads/%s" % (head, ref))
 
+    if repo_cfg.get("oss_mirror"):
+        mirror = mirror_oss_deps(repo_cfg, refs=[head], script_ref=head)
+        if not mirror["done"]:
+            return {"done": False, "reason": "推送前 OSS 同步失败：%s" % mirror["reason"]}
+
     rc, text = g.git(args, wt, check=False, timeout=1800)
     return {
         "done": rc == 0,
@@ -412,13 +424,11 @@ def _key_error_line(out):
     return lines[-1][:300]
 
 
-def mirror_oss_deps(repo_cfg):
+def mirror_oss_deps(repo_cfg, *, refs=None, script_ref=None):
     """把某个 ref 钉定的 cmake 依赖同步到内网 OSS。
 
-    为什么必须跟在推送后面：daily 分支跟着社区 main 走，cmake 里钉的依赖版本
-    天天变（2026-10-19→10-22 三天里 DeepGEMM 换了两次），而内网构建只认 OSS 上
-    的包。缺一个，CI 就以「OSS 镜像缺少 cmake 依赖」整条挂掉 —— 这步此前一直靠
-    手工补，结果流水线挂了三天没人发现。
+    推送前对候选 SHA 同步，避免 CI 比包上传先启动。独立 mirror 命令则检查
+    配置中的远端分支，并使用 delta source 中的最新解析器修复历史遗漏。
 
     用 git archive 把 cmake 导出到临时目录，而不是让脚本自己 --vllm-ref clone：
     那会把整个 vllm 仓重新 clone 一遍，而我们只要几个 cmake 文件。
@@ -428,20 +438,29 @@ def mirror_oss_deps(repo_cfg):
         return {"done": False, "reason": "该仓库没有配 oss_mirror（不走 OSS 构建）"}
 
     repo = repo_cfg["repo"]
-    script = os.path.join(repo, spec["script"])
-    if not os.path.isfile(script):
-        return {"done": False, "reason": "找不到同步脚本 %s" % spec["script"]}
-
-    refs = _expand_mirror_refs(repo_cfg, spec)
+    refs = _expand_mirror_refs(repo_cfg, spec) if refs is None else refs
     if not refs:
         return {"done": False, "reason": "配的 refs 一个都没匹配到远端分支：%s"
                                          % "、".join(spec.get("refs") or [])}
-    results = [_mirror_one_ref(repo_cfg, spec, script, r) for r in refs]
+    # 主 checkout 可能长期不 pull；所有分支共用已抓取的 delta source 解析器。
+    script_ref = script_ref or repo_cfg["delta_source"]
+    rc, script_sha = g.git(["rev-parse", "--verify", script_ref], repo, check=False)
+    if rc != 0:
+        return {"done": False, "reason": "找不到脚本来源 %s" % script_ref}
+    rc, body = g.git(["show", "%s:%s" % (script_sha, spec["script"])], repo, check=False)
+    if rc != 0:
+        return {"done": False, "reason": "%s 中找不到同步脚本 %s" % (script_ref, spec["script"])}
+    with tempfile.TemporaryDirectory(prefix="oss-mirror-script-") as script_dir:
+        script = os.path.join(script_dir, os.path.basename(spec["script"]))
+        pathlib.Path(script).write_text(body + "\n", encoding="utf-8")
+        results = [_mirror_one_ref(repo_cfg, spec, script, r) for r in refs]
     uploaded = [u for r in results for u in (r.get("uploaded") or [])]
     bad = [r for r in results if not r["done"]]
     return {
         "done": not bad,
         "refs": refs,
+        "script_ref": script_ref,
+        "script_sha": script_sha,
         "uploaded": uploaded,
         "per_ref": results,
         "reason": "ok" if not bad else "；".join(
@@ -560,6 +579,10 @@ def _mirror_one_ref(repo_cfg, spec, script, ref):
         man = subprocess.run(
             [sys.executable, script, "manifest", "--vllm-src", tmp, "--output", "/dev/stdout"],
             cwd=repo, capture_output=True, text=True, timeout=600, check=False)
+        if man.returncode != 0:
+            return {"done": False, "ref": ref, "uploaded": uploaded,
+                    "reason": "生成 manifest 失败（%s）" % _key_error_line(
+                        (man.stdout or "") + (man.stderr or ""))}
         entry_envs = {
             cols[3] for cols in (l.split("\t") for l in (man.stdout or "").splitlines())
             if len(cols) > 3 and cols[3].endswith("_SRC_DIR")
