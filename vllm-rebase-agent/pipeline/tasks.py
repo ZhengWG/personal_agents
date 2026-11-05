@@ -9,6 +9,7 @@
 后续 patch 可能出现连带冲突 —— 报告里明确标了 cascaded，别当成独立问题。
 """
 import os
+import pathlib
 import re
 import shlex
 import shutil
@@ -550,6 +551,31 @@ def _mirror_one_ref(repo_cfg, spec, script, ref):
         # 复核本身也要 ossutil 查 OSS。它崩掉时输出里自然没有 [MISS] 行，
         # 不能据此判定"没缺" —— 2026-10-26 就是这样把 ossutil 缺失报成了
         # still_missing: []（看起来一切正常）。所以先确认复核真的跑成了。
+        # 钩子对账：cmake 里声明的每个 *_SRC_DIR 都必须在 manifest 里有条目。
+        # 解析器接不住某种 FetchContent 写法时，那个依赖会被静默跳过 —— 不进
+        # manifest、sync 不传、dry-run 也不报缺，看起来一切正常。2026-11-05
+        # triton_kernels 就是这样消失的（上游从 GIT_REPOSITORY 改成 URL +
+        # 三步 string() 变换），只有 CI 侧的同一套对账喊了出来，而我们这边
+        # 连着多轮报"已同步"。这道检查就是把 CI 的那一步搬到上游来。
+        man = subprocess.run(
+            [sys.executable, script, "manifest", "--vllm-src", tmp, "--output", "/dev/stdout"],
+            cwd=repo, capture_output=True, text=True, timeout=600, check=False)
+        entry_envs = {
+            cols[3] for cols in (l.split("\t") for l in (man.stdout or "").splitlines())
+            if len(cols) > 3 and cols[3].endswith("_SRC_DIR")
+        }
+        hooks = set()
+        for pat in ("CMakeLists.txt", "cmake/external_projects/*.cmake"):
+            for f in sorted(pathlib.Path(tmp).glob(pat)):
+                hooks |= set(re.findall(r"ENV\{(\w+_SRC_DIR)\}", f.read_text(errors="replace")))
+        uncovered = sorted(hooks - entry_envs)
+        if uncovered:
+            return {"done": False, "ref": ref, "uploaded": uploaded,
+                    "still_missing": None, "blocking": None,
+                    "reason": "解析器漏了依赖，这些 *_SRC_DIR 钩子没有 manifest 条目：%s"
+                              "（上游大概换了 FetchContent 写法，先修 %s 的解析）"
+                              % ("、".join(uncovered), spec["script"])}
+
         chk_ok = chk.returncode == 0 and "[ok ]" in (chk.stdout or "")
         if not chk_ok:
             return {"done": False, "ref": ref, "uploaded": uploaded,
