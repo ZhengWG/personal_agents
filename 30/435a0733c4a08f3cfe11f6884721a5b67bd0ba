@@ -1,0 +1,21 @@
+vllm-rebase-agent/config/tasks.json
+  s_e52399732e429b::t_f86b791e070ed4 60-61
+vllm-rebase-agent/pipeline/tasks.py
+  s_e52399732e429b::t_f86b791e070ed4 12,554-578
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "30435a0733c4a08f3cfe11f6884721a5b67bd0ba",
+  "prompts": {},
+  "sessions": {
+    "s_e52399732e429b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e00bb107-e8c2-4542-928f-63221942e6da",
+        "model": "claude-opus-5"
+      },
+      "human_author": "ZhengWG <zwg0606@gmail.com>"
+    }
+  }
+}
