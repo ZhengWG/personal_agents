@@ -1,0 +1,30 @@
+vllm-rebase-agent/config/tasks.json
+  s_1053bc57915cba::t_5545b71ed1d69f 56
+vllm-rebase-agent/pipeline/tasks.py
+  s_1053bc57915cba::t_c19715715a4d90 445,447-456,462-463,582-585
+  s_1053bc57915cba::t_f1521639b3b21f 394-398,427,430-431,441,446
+  s_1053bc57915cba::t_8e5b74290237ee 304-311
+vllm-rebase-agent/README.md
+  s_1053bc57915cba::t_8e5b74290237ee 84-88
+vllm-rebase-agent/tests/test_mirror.py
+  s_1053bc57915cba::t_2818443f63e949 1-5,7-79,114-117
+  s_1053bc57915cba::t_8e5b74290237ee 6,80-113
+vllm-rebase-agent/run.sh
+  s_1053bc57915cba::t_5545b71ed1d69f 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "56e5c89321d203b76b57a8dae9a56382555978d1",
+  "prompts": {},
+  "sessions": {
+    "s_1053bc57915cba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ac76-8cad-76a0-bff2-4816eb2bcc87",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "ZhengWG <zwg0606@gmail.com>"
+    }
+  }
+}
