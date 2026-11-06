@@ -83,11 +83,34 @@ ARXIV_KEYWORDS = re.compile(
     re.I)
 
 ATOM = "{http://www.w3.org/2005/Atom}"
+# `.` and `-` are legal inside owner/repo, so this also swallows the period
+# that ends a sentence (`github.com/vllm-project/vllm.`) and a trailing hyphen.
+# `clean_repo_mention` strips that tail before any tracked/candidate check.
 REPO_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
 # github.com/<these>/... are site paths, not repos (PR-body image links are
 # github.com/user-attachments/assets/<uuid> — got auto-promoted 2026-10-07)
 NON_REPO_OWNERS = {"user-attachments", "orgs", "users", "settings", "sponsors",
                    "marketplace", "topics", "features", "apps", "notifications"}
+
+
+def clean_repo_mention(name: str) -> str:
+    """Normalize a `github.com/<owner>/<repo>` match before it is counted.
+
+    A trailing `.git`, the period that ends a sentence, and a trailing hyphen
+    are not part of the repo. Left on, `vllm-project/vllm.` misses `tracked`
+    and is auto-promoted; the next PR search then queries `repo:vllm-project/vllm.`,
+    which GitHub rejects, so that whole chunk of repos drops out of the digest.
+    Returns "" when the match is not `owner/repo` after stripping.
+    """
+    name = name.rstrip(".-")
+    if name.endswith(".git"):
+        name = name[:-4].rstrip(".-")
+    owner, sep, repo = name.partition("/")
+    if not sep or not owner or not repo or "/" in repo:
+        return ""
+    return f"{owner}/{repo}"
+
+
 # infra-relevance gate for org-watch auto-tracking (drops awesome-lists, OCR, apps)
 INFRA_KW = re.compile(
     r"infer|serv|kernel|gemm|attention|\bmla\b|\bmoe\b|expert|parallel|pipeline|"
@@ -244,7 +267,9 @@ def load_awesome(cfg: dict) -> set:
                     f"https://raw.githubusercontent.com/{lst}/{branch}/README.md"
                 ).decode("utf-8", "ignore")
                 for m in REPO_RE.findall(md):
-                    out.add(m[:-4] if m.endswith(".git") else m)
+                    name = clean_repo_mention(m)
+                    if name:
+                        out.add(name)
                 break
             except Exception as e:  # noqa: BLE001
                 if branch == "master":
@@ -263,7 +288,9 @@ def tally_and_promote(cfg: dict, blob: str, tracked_names: set, today: str,
     cands = cfg.setdefault("candidates", {})
     counts: dict[str, int] = {}
     for m in REPO_RE.findall(blob or ""):
-        name = m[:-4] if m.endswith(".git") else m
+        name = clean_repo_mention(m)
+        if not name:
+            continue
         short = name.split("/")[-1].lower()
         if (name in tracked_names or short in ignore or name.count("/") != 1
                 or name.split("/")[0].lower() in NON_REPO_OWNERS):
