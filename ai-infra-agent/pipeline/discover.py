@@ -35,8 +35,10 @@ from pathlib import Path
 
 try:
     from . import paths, http as _http
+    from .fetch import clean_repo_mention
 except ImportError:  # 直接执行本文件时
     import paths, http as _http
+    from fetch import clean_repo_mention
 
 UA = "ai-infra-agent/0.3 (+https://github.com/personal-agents)"
 CONFIG_PATH = paths.REPOS_JSON
@@ -276,7 +278,8 @@ def fetch_awesome_new(cfg: dict, state: dict, tracked: set[str], ignore: set[str
                     warn(f"awesome {lst} failed: {e}")
         if md is None:
             continue
-        names = {m[:-4] if m.endswith(".git") else m for m in REPO_RE.findall(md)}
+        names = {clean_repo_mention(m) for m in REPO_RE.findall(md)}
+        names.discard("")
         names = {n for n in names if n.count("/") == 1}
         prev = set(snaps.get(lst, {}).get("repos") or [])
         first_run = not prev
